@@ -92,7 +92,15 @@
   </style>
 </head>
 <body>
-  <header><div><h1>Tempest Log Dashboard</h1><div class="subtitle">AdvantageKit .wpilog analyzer</div></div></header>
+  <header>
+    <div><h1>Tempest Log Dashboard</h1><div class="subtitle">AdvantageKit .wpilog analyzer</div></div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <span id="headerMatchName" style="font-size:12px;color:var(--text-muted);display:none"></span>
+      <button id="uploadAnotherBtn" class="reset-zoom-btn" style="display:none;padding:6px 14px;font-size:12px" onclick="document.getElementById('fileInput2').click()">+ Upload Log</button>
+      <button id="backToUploadBtn" class="reset-zoom-btn" style="display:none;padding:6px 14px;font-size:12px" onclick="backToUpload()">Back</button>
+      <input type="file" id="fileInput2" accept=".wpilog" multiple style="display:none" />
+    </div>
+  </header>
   <div id="upload-section">
     <div class="upload-zone" id="dropZone">
       <h2>Drop .wpilog file here</h2>
@@ -1037,11 +1045,28 @@ function computeBaseline(history) {
 function showHistoryPreview() {
   const el = document.getElementById('historyPreview');
   const h = loadHistory();
-  if (!h.length) { el.style.display='none'; return; }
+  if (!h.length && !(typeof sessionLogs!=='undefined'&&sessionLogs.size)) { el.style.display='none'; return; }
   el.style.display='block';
+
+  // Session logs section (clickable to re-open)
+  let sessionHTML = '';
+  if (typeof sessionLogs!=='undefined' && sessionLogs.size) {
+    sessionHTML = `<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Session logs (click to open):</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    for (const [fn] of sessionLogs) {
+      sessionHTML += `<button class="reset-zoom-btn" style="padding:5px 12px;font-size:11px" onclick="switchToLog('${fn.replace(/'/g,"\\'")}')">${fn.replace('.wpilog','')}</button>`;
+    }
+    sessionHTML += `</div></div>`;
+  }
+
+  if (!h.length) {
+    el.innerHTML = `<div class="chart-box" style="margin:0">${sessionHTML}</div>`;
+    return;
+  }
+
   const bl = computeBaseline(h);
   el.innerHTML = `
     <div class="chart-box" style="margin:0">
+      ${sessionHTML}
       <h3 style="margin-bottom:8px">Stored Profile: ${h.length} match${h.length>1?'es':''}</h3>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
         Avg peak: ${bl.peakCurrent.avg.toFixed(1)}A &bull;
@@ -1110,22 +1135,28 @@ function renderHistory(panel, currentProfile) {
   }
 
   // All matches table
+  const cachedNames = typeof sessionLogs!=='undefined' ? sessionLogs : new Map();
   let matchesHTML = `<div class="section-title">All Stored Matches (${history.length})</div>
     <div class="chart-box"><table class="data-table">
       <thead><tr><th>File</th><th>Date</th><th>Duration</th><th>Peak I</th><th>Avg I</th><th>Min V</th><th>Time &gt;120A</th><th></th></tr></thead><tbody>`;
   for (const m of history) {
     const isCurrent = currentProfile && m.filename === currentProfile.filename;
-    matchesHTML += `<tr style="${isCurrent?'background:rgba(59,130,246,0.1)':''}">
-      <td>${m.filename.replace('.wpilog','')}</td>
+    const isCached = cachedNames.has(m.filename);
+    const rowStyle = isCurrent ? 'background:rgba(59,130,246,0.1)' : (isCached ? 'cursor:pointer' : '');
+    const clickAttr = (!isCurrent && isCached) ? ` onclick="switchToLog('${m.filename.replace(/'/g,"\\'")}')"` : '';
+    matchesHTML += `<tr style="${rowStyle}"${clickAttr}>
+      <td>${m.filename.replace('.wpilog','')} ${isCached && !isCurrent ? '<span style="color:var(--green);font-size:9px;margin-left:4px">&#9679; loaded</span>' : ''}</td>
       <td>${m.date?new Date(m.date).toLocaleDateString():'-'}</td>
       <td>${m.duration.toFixed(0)}s</td>
       <td>${m.peakCurrent.toFixed(1)}A</td>
       <td>${m.avgCurrent.toFixed(1)}A</td>
       <td>${m.minVoltage.toFixed(2)}V</td>
       <td>${m.timeAbove120.toFixed(1)}s</td>
-      <td>${isCurrent?'<span style="color:var(--accent);font-size:10px">CURRENT</span>':''}</td></tr>`;
+      <td>${isCurrent?'<span style="color:var(--accent);font-size:10px">&#9654; VIEWING</span>' : (isCached?'<span style="color:var(--text-muted);font-size:10px;cursor:pointer">switch &#8594;</span>':'<span style="color:var(--text-muted);font-size:9px;opacity:0.5">not loaded</span>')}</td></tr>`;
   }
-  matchesHTML += '</tbody></table></div>';
+  matchesHTML += '</tbody></table>';
+  matchesHTML += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Click a <span style="color:var(--green)">&#9679; loaded</span> match to switch to it. Upload more logs with the <strong>+ Upload Log</strong> button.</div>`;
+  matchesHTML += '</div>';
 
   // Aggregate baseline
   let blHTML = '';
@@ -1187,25 +1218,69 @@ function renderHistory(panel, currentProfile) {
 // ============== FILE HANDLING ==============
 const dropZone=document.getElementById('dropZone'),fileInput=document.getElementById('fileInput');
 const uploadSection=document.getElementById('upload-section'),loadingDiv=document.getElementById('loading'),app=document.getElementById('app');
+const fileInput2=document.getElementById('fileInput2');
+const uploadAnotherBtn=document.getElementById('uploadAnotherBtn');
+const backToUploadBtn=document.getElementById('backToUploadBtn');
+const headerMatchName=document.getElementById('headerMatchName');
+
+// Session cache: keep parsed logs in memory so user can switch between them
+const sessionLogs = new Map(); // filename -> {parser, fileName}
+
+function showHeaderControls(fileName) {
+  uploadAnotherBtn.style.display='inline-block';
+  backToUploadBtn.style.display='inline-block';
+  headerMatchName.style.display='inline-block';
+  headerMatchName.textContent=fileName?fileName.replace('.wpilog',''):'';
+}
+function hideHeaderControls() {
+  uploadAnotherBtn.style.display='none';
+  backToUploadBtn.style.display='none';
+  headerMatchName.style.display='none';
+}
+function backToUpload() {
+  app.style.display='none';
+  uploadSection.style.display='block';
+  hideHeaderControls();
+  showHistoryPreview();
+}
+
+// Switch to a cached log by filename
+function switchToLog(filename) {
+  const cached = sessionLogs.get(filename);
+  if (cached) {
+    buildDashboard(cached.parser, cached.fileName);
+    return;
+  }
+  // Not cached — can't switch, show message
+  alert('Log "'+filename+'" is not loaded in this session. Please upload it again.');
+}
+
+function handleFiles(files) {
+  const wpiFiles = Array.from(files).filter(f=>f.name.endsWith('.wpilog'));
+  if(wpiFiles.length===1) loadFile(wpiFiles[0]);
+  else if(wpiFiles.length>1) loadFilesForHistory(wpiFiles);
+}
+
 dropZone.addEventListener('click',()=>fileInput.click());
 dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
 dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
-dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');
-  const files=Array.from(e.dataTransfer.files).filter(f=>f.name.endsWith('.wpilog'));
-  if(files.length===1)loadFile(files[0]);else if(files.length>1)loadFilesForHistory(files);
-});
-fileInput.addEventListener('change',()=>{
-  const files=Array.from(fileInput.files).filter(f=>f.name.endsWith('.wpilog'));
-  if(files.length===1)loadFile(files[0]);else if(files.length>1)loadFilesForHistory(files);
-});
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');handleFiles(e.dataTransfer.files);});
+fileInput.addEventListener('change',()=>{handleFiles(fileInput.files);fileInput.value='';});
+fileInput2.addEventListener('change',()=>{handleFiles(fileInput2.files);fileInput2.value='';});
 
 // Show history preview on page load
 showHistoryPreview();
 
 function loadFile(file){
   uploadSection.style.display='none';loadingDiv.style.display='block';app.style.display='none';
+  hideHeaderControls();
   const reader=new FileReader();
-  reader.onload=e=>{try{const P=new WPILOGParser(e.target.result);P.parse();loadingDiv.style.display='none';app.style.display='block';buildDashboard(P,file.name);}catch(err){loadingDiv.textContent='Error: '+err.message;console.error(err);}};
+  reader.onload=e=>{try{
+    const P=new WPILOGParser(e.target.result);P.parse();
+    sessionLogs.set(file.name,{parser:P,fileName:file.name});
+    loadingDiv.style.display='none';app.style.display='block';
+    buildDashboard(P,file.name);
+  }catch(err){loadingDiv.textContent='Error: '+err.message;console.error(err);}};
   reader.readAsArrayBuffer(file);
 }
 
@@ -1229,6 +1304,7 @@ function loadFilesForHistory(files){
         const toSec=ts=>(ts-minTs)/1e6;
         const profile=extractProfile(P,toSec,files[i].name);
         addToHistory(profile);
+        sessionLogs.set(files[i].name,{parser:P,fileName:files[i].name});
         lastP=P;lastFn=files[i].name;
       }catch(err){console.warn('Skipping '+files[i].name+': '+err.message);}
       processed++;
@@ -1242,12 +1318,14 @@ function loadFilesForHistory(files){
 
 function buildDashboard(P,fileName){
   destroyAll();TABS.length=0;
+  uploadSection.style.display='none';loadingDiv.style.display='none';app.style.display='block';
   let minTs=Infinity;for(const[,recs]of P.records)if(recs.length&&recs[0].timestamp<minTs)minTs=recs[0].timestamp;
   const toSec=ts=>(ts-minTs)/1e6;
 
   // Extract profile and add to history
   const currentProfile=extractProfile(P,toSec,fileName||'unknown');
   addToHistory(currentProfile);
+  showHeaderControls(fileName);
 
   addTab('power','Power',panel=>renderPower(panel,P,toSec));
   addTab('pose','Pose Estimation',panel=>renderPose(panel,P,toSec));

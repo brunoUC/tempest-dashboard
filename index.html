@@ -6,6 +6,8 @@
   <title>Tempest Log Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
   <style>
     :root {
       --bg: #0f1117; --surface: #1a1d27; --surface2: #242736; --border: #2e3247;
@@ -75,6 +77,18 @@
     .alert-type.error { background: rgba(239,68,68,0.15); color: var(--red); }
     .alert-type.warning { background: rgba(249,115,22,0.15); color: var(--orange); }
     .alert-type.info { background: rgba(59,130,246,0.15); color: var(--accent); }
+    .zoom-hint { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+    .reset-zoom-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); padding: 3px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left: 8px; }
+    .reset-zoom-btn:hover { color: var(--text); border-color: var(--accent); }
+    .imbalance-banner { background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; font-size: 13px; }
+    .imbalance-banner strong { color: var(--orange); }
+    .imbalance-ok { background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.2); border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; font-size: 13px; }
+    .sub-tab-bar { display: flex; gap: 0; overflow-x: auto; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .sub-tab-btn { padding: 8px 14px; font-size: 12px; font-weight: 500; color: var(--text-muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+    .sub-tab-btn:hover { color: var(--text); }
+    .sub-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .sub-tab-panel { display: none; }
+    .sub-tab-panel.active { display: block; }
   </style>
 </head>
 <body>
@@ -176,7 +190,33 @@ function alignSeries(seriesList, maxPts) {
 const COLORS=['#3b82f6','#22c55e','#f97316','#ef4444','#a78bfa','#f472b6','#eab308','#06b6d4','#10b981','#f43f5e'];
 const MAX_PTS=2000; let allCharts=[];
 function destroyAll(){allCharts.forEach(c=>c.destroy());allCharts=[];}
-function mkChart(el,cfg){if(!el)return null;cfg.options=cfg.options||{};cfg.options.animation=false;cfg.options.responsive=true;const c=new Chart(el,cfg);allCharts.push(c);return c;}
+function mkChart(el,cfg){
+  if(!el)return null;
+  cfg.options=cfg.options||{};
+  cfg.options.animation=false;
+  cfg.options.responsive=true;
+  // Inject zoom on x-axis for all charts
+  cfg.options.plugins=cfg.options.plugins||{};
+  if(!cfg.options.plugins.zoom){
+    cfg.options.plugins.zoom={
+      pan:{enabled:true,mode:'x',modifierKey:null},
+      zoom:{wheel:{enabled:true,modifierKey:'ctrl'},pinch:{enabled:true},drag:{enabled:true,backgroundColor:'rgba(59,130,246,0.1)',borderColor:'rgba(59,130,246,0.4)',borderWidth:1},mode:'x'}
+    };
+  }
+  const c=new Chart(el,cfg);
+  allCharts.push(c);
+  // Add reset zoom button after canvas
+  const btn=document.createElement('button');
+  btn.className='reset-zoom-btn';
+  btn.textContent='Reset Zoom';
+  btn.onclick=()=>c.resetZoom();
+  const hint=document.createElement('div');
+  hint.className='zoom-hint';
+  hint.innerHTML='Drag to zoom X axis &bull; Ctrl+Scroll to zoom &bull; ';
+  hint.appendChild(btn);
+  el.parentNode.appendChild(hint);
+  return c;
+}
 function ts2(data,toSec){const t=[],v=[];for(const r of data){t.push(toSec(r.timestamp));v.push(r.value);}return{times:t,values:v};}
 function sustainedPeriods(t,v){const th=[130,150,180,210,240,300,360,480,600],pts=[];for(const h of th){let mx=0,s=null;for(let i=0;i<v.length;i++){if(v[i]>=h){if(s===null)s=t[i];}else{if(s!==null){mx=Math.max(mx,t[i]-s);s=null;}}}if(s!==null)mx=Math.max(mx,t[t.length-1]-s);if(mx>0.01)pts.push({x:h,y:mx});}return pts;}
 
@@ -302,8 +342,13 @@ function renderPower(panel, P, toSec) {
     </div>
     <div class="section-title">Per-Channel PDH Currents</div>
     <div class="chart-box"><table class="data-table"><thead><tr><th>Ch</th><th>Avg (A)</th><th>Max (A)</th><th>% Total</th><th></th></tr></thead><tbody id="pwChTable"></tbody></table></div>
-    <div class="section-title">Subsystem Currents</div>
-    <div class="chart-box"><canvas id="pwSub"></canvas></div>`;
+    <div class="section-title">Subsystem Currents (aggregated)</div>
+    <div class="chart-box"><canvas id="pwSub"></canvas></div>
+    <div class="section-title">Motor Current Imbalance Check</div>
+    <div id="pwImbalance"></div>
+    <div class="section-title">Per-Subsystem Power Breakdown</div>
+    <div class="sub-tab-bar" id="pwSubBar"></div>
+    <div id="pwSubPanels"></div>`;
 
   const bannerEl=panel.querySelector('#pw-banner');
   if(peak>CB285_RATED*1.35){const lo=getTripTime(peak,'lower'),hi=getTripTime(peak,'upper');bannerEl.innerHTML=`<div class="banner danger"><strong>Breaker Trip Risk</strong> &mdash; Peak ${peak.toFixed(1)}A (${((peak/CB285_RATED)*100).toFixed(0)}%). CB285 trips between <strong>${lo.toFixed(1)}s</strong> and <strong>${hi.toFixed(1)}s</strong>. Time above 120A: ${t120.toFixed(1)}s.</div>`;}
@@ -313,7 +358,7 @@ function renderPower(panel, P, toSec) {
   mkChart(panel.querySelector('#pwCurrent'),{type:'line',data:{labels:cd.times.map(t=>t.toFixed(1)),datasets:[{data:cd.values,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false},annotation:{annotations:{r:{type:'line',yMin:120,yMax:120,borderColor:'#22c55e',borderWidth:2,borderDash:[6,4],label:{display:true,content:'120A',position:'start',backgroundColor:'rgba(34,197,94,0.8)',font:{size:10}}},l:{type:'line',yMin:162,yMax:162,borderColor:'#f97316',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'162A (135%)',position:'start',backgroundColor:'rgba(249,115,22,0.8)',font:{size:10}}},u2:{type:'line',yMin:240,yMax:240,borderColor:'#ef4444',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'240A (200%)',position:'start',backgroundColor:'rgba(239,68,68,0.8)',font:{size:10}}},u3:{type:'line',yMin:360,yMax:360,borderColor:'#ef4444',borderWidth:1,borderDash:[2,4],label:{display:true,content:'360A (300%)',position:'end',backgroundColor:'rgba(239,68,68,0.6)',font:{size:10}}}}}}}});
 
   const sp=sustainedPeriods(cT,cV);
-  mkChart(panel.querySelector('#pwTrip'),{type:'scatter',data:{datasets:[{label:'Trip Lower',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.lower})),borderColor:'#f97316',showLine:true,borderWidth:2,pointRadius:3,fill:false},{label:'Trip Upper',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.upper})),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',showLine:true,borderWidth:2,pointRadius:3,fill:'-1'},{label:'Your Robot',data:sp,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.8)',pointRadius:6,pointStyle:'crossRot',showLine:false}]},options:{scales:{x:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:120},y:{type:'logarithmic',title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0.1,max:1000}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
+  mkChart(panel.querySelector('#pwTrip'),{type:'scatter',data:{datasets:[{label:'Trip Lower',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.lower})),borderColor:'#f97316',showLine:true,borderWidth:2,pointRadius:3,fill:false},{label:'Trip Upper',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.upper})),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',showLine:true,borderWidth:2,pointRadius:3,fill:'-1'},{label:'Your Robot',data:sp,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.8)',pointRadius:6,pointStyle:'crossRot',showLine:true,borderWidth:2,borderDash:[4,4]}]},options:{scales:{x:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:120},y:{type:'logarithmic',title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0.1,max:1000}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
 
   if(vd.times.length){const v=dsMax(vd.times,vd.values,MAX_PTS);mkChart(panel.querySelector('#pwVolt'),{type:'line',data:{labels:v.times.map(t=>t.toFixed(1)),datasets:[{data:v.values,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},suggestedMin:6,suggestedMax:14}},plugins:{legend:{display:false}}}});}
   if(bd.times.length){const b=dsMax(bd.times,bd.values,MAX_PTS);mkChart(panel.querySelector('#pwBattCurr'),{type:'line',data:{labels:b.times.map(t=>t.toFixed(1)),datasets:[{data:b.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});}
@@ -325,6 +370,158 @@ function renderPower(panel, P, toSec) {
   const subDS=[],subLR={len:0,arr:[]};
   subDefs.forEach((sd,si)=>{let ae=[];sd.entries.forEach(re=>{ae=ae.concat(P.match(re));});if(!ae.length)return;const bk=new Map();for(const e of ae)for(const r of e.data){if(typeof r.value!=='number')continue;const t=Math.round(toSec(r.timestamp)/0.02)*0.02;bk.set(t,(bk.get(t)||0)+r.value);}const s=[...bk.entries()].sort((a,b)=>a[0]-b[0]);const t=s.map(x=>x[0]),v=s.map(x=>x[1]);const d=dsMax(t,v,MAX_PTS);subDS.push({label:sd.name,data:d.values,borderColor:COLORS[si%COLORS.length],borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});if(d.times.length>subLR.len){subLR.len=d.times.length;subLR.arr=d.times;}});
   mkChart(panel.querySelector('#pwSub'),{type:'line',data:{labels:subLR.arr.map(t=>t.toFixed(1)),datasets:subDS},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
+
+  // ---- Motor current imbalance check ----
+  const motorGroups = [
+    {name: 'Drive Motors', motors: [
+      {label:'M0',path:'/Drive/Module0/DriveCurrentAmps'},{label:'M1',path:'/Drive/Module1/DriveCurrentAmps'},
+      {label:'M2',path:'/Drive/Module2/DriveCurrentAmps'},{label:'M3',path:'/Drive/Module3/DriveCurrentAmps'}]},
+    {name: 'Steer Motors', motors: [
+      {label:'M0',path:'/Drive/Module0/TurnCurrentAmps'},{label:'M1',path:'/Drive/Module1/TurnCurrentAmps'},
+      {label:'M2',path:'/Drive/Module2/TurnCurrentAmps'},{label:'M3',path:'/Drive/Module3/TurnCurrentAmps'}]},
+  ];
+  // Also check roller current if there are logged entries (single motor, just show stats)
+  const singleMotors = [
+    {name:'Flywheel', path:'/Subsystems/Shooter/FlyWheels//CurrentVelocity', note:'(velocity, not current)'},
+    {name:'Turret', path:'/Subsystems/Shooter/Turret//Current'},
+    {name:'Roller', path:'/Subsystems/Roller/RollerCurrent'},
+    {name:'Kicker', path:'/Subsystems/Kicker/KickerCurrent'},
+    {name:'Extensor', path:'/Subsystems/Extensor/ExtensorCurrent'},
+    {name:'Spindexer', path:'/Subsystems/Spindexer/SpindexerCurrent'},
+    {name:'Climber', path:'/Subsystems/Climber/ClimberCurrent'},
+  ];
+
+  function computeMotorStats(entry) {
+    if (!entry || !entry.data.length) return null;
+    let sum=0,max=0,count=0;
+    for (const r of entry.data) { const v=Math.abs(r.value); sum+=v; if(v>max)max=v; count++; }
+    return {avg:count?sum/count:0, max, count};
+  }
+
+  const imbalanceEl = panel.querySelector('#pwImbalance');
+  let imbalanceHTML = '';
+
+  for (const grp of motorGroups) {
+    const stats = grp.motors.map(m => ({...m, stats: computeMotorStats(P.get(m.path))})).filter(m=>m.stats&&m.stats.count>10);
+    if (stats.length < 2) continue;
+    const avgs = stats.map(s=>s.stats.avg);
+    const mean = avgs.reduce((a,b)=>a+b,0)/avgs.length;
+    const maxDev = Math.max(...avgs.map(a=>Math.abs(a-mean)));
+    const pctDev = mean>0?(maxDev/mean*100):0;
+    const isImbalanced = pctDev > 25;
+
+    if (isImbalanced) {
+      const worst = stats.reduce((a,b)=>Math.abs(a.stats.avg-mean)>Math.abs(b.stats.avg-mean)?a:b);
+      imbalanceHTML += `<div class="imbalance-banner"><strong>${grp.name} Imbalance (${pctDev.toFixed(0)}% deviation)</strong> &mdash;
+        ${stats.map(s=>`${s.label}: ${s.stats.avg.toFixed(2)}A avg`).join(', ')}.
+        <strong>${worst.label}</strong> deviates most from the group mean (${mean.toFixed(2)}A).
+        Check for mechanical binding, encoder issues, or wiring problems on that module.</div>`;
+    } else {
+      imbalanceHTML += `<div class="imbalance-ok"><strong>${grp.name} OK</strong> &mdash; ${pctDev.toFixed(0)}% max deviation.
+        ${stats.map(s=>`${s.label}: ${s.stats.avg.toFixed(2)}A`).join(', ')}.</div>`;
+    }
+  }
+  imbalanceEl.innerHTML = imbalanceHTML;
+
+  // ---- Per-subsystem power sub-tabs ----
+  const pwSubBar = panel.querySelector('#pwSubBar');
+  const pwSubPanels = panel.querySelector('#pwSubPanels');
+
+  const powerSubTabs = [
+    {id:'pw-drive', label:'Drive', motors:[
+      {label:'M0 Drive',path:'/Drive/Module0/DriveCurrentAmps',color:'#3b82f6'},
+      {label:'M1 Drive',path:'/Drive/Module1/DriveCurrentAmps',color:'#22c55e'},
+      {label:'M2 Drive',path:'/Drive/Module2/DriveCurrentAmps',color:'#f97316'},
+      {label:'M3 Drive',path:'/Drive/Module3/DriveCurrentAmps',color:'#ef4444'}]},
+    {id:'pw-steer', label:'Steer', motors:[
+      {label:'M0 Turn',path:'/Drive/Module0/TurnCurrentAmps',color:'#3b82f6'},
+      {label:'M1 Turn',path:'/Drive/Module1/TurnCurrentAmps',color:'#22c55e'},
+      {label:'M2 Turn',path:'/Drive/Module2/TurnCurrentAmps',color:'#f97316'},
+      {label:'M3 Turn',path:'/Drive/Module3/TurnCurrentAmps',color:'#ef4444'}]},
+    {id:'pw-turret', label:'Turret', motors:[
+      {label:'Turret Current',path:'/Subsystems/Shooter/Turret//Current',color:'#a78bfa'}]},
+    {id:'pw-roller', label:'Roller', motors:[
+      {label:'Roller Current',path:'/Subsystems/Roller/RollerCurrent',color:'#f472b6'}]},
+    {id:'pw-kicker', label:'Kicker', motors:[
+      {label:'Kicker Current',path:'/Subsystems/Kicker/KickerCurrent',color:'#eab308'}]},
+    {id:'pw-extensor', label:'Extensor', motors:[
+      {label:'Extensor Current',path:'/Subsystems/Extensor/ExtensorCurrent',color:'#06b6d4'}]},
+    {id:'pw-spindexer', label:'Spindexer', motors:[
+      {label:'Spindexer Current',path:'/Subsystems/Spindexer/SpindexerCurrent',color:'#10b981'}]},
+    {id:'pw-climber', label:'Climber', motors:[
+      {label:'Climber Current',path:'/Subsystems/Climber/ClimberCurrent',color:'#f43f5e'}]},
+  ];
+
+  const pwSubRendered = new Set();
+  powerSubTabs.forEach((tab,ti) => {
+    const btn = document.createElement('button');
+    btn.className = 'sub-tab-btn' + (ti===0?' active':'');
+    btn.textContent = tab.label;
+    const pnl = document.createElement('div');
+    pnl.id = tab.id;
+    pnl.className = 'sub-tab-panel' + (ti===0?' active':'');
+
+    btn.onclick = () => {
+      pwSubBar.querySelectorAll('.sub-tab-btn').forEach(b=>b.classList.remove('active'));
+      pwSubPanels.querySelectorAll('.sub-tab-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active'); pnl.classList.add('active');
+      if (!pwSubRendered.has(tab.id)) { pwSubRendered.add(tab.id); renderPowerSubTab(pnl, tab); }
+    };
+    pwSubBar.appendChild(btn);
+    pwSubPanels.appendChild(pnl);
+    if (ti===0) { pwSubRendered.add(tab.id); renderPowerSubTab(pnl, tab); }
+  });
+
+  function renderPowerSubTab(pnl, tab) {
+    // Stats cards
+    const motorStats = tab.motors.map(m => {
+      const entry = P.get(m.path);
+      const st = computeMotorStats(entry);
+      return {...m, entry, stats: st};
+    }).filter(m => m.stats && m.stats.count > 0);
+
+    if (!motorStats.length) { pnl.innerHTML = '<div style="padding:20px;color:var(--text-muted)">No data for this subsystem.</div>'; return; }
+
+    let statsHTML = '<div class="stats-grid">';
+    for (const m of motorStats) {
+      statsHTML += `<div class="stat-card"><div class="label">${m.label}</div>
+        <div class="value">${m.stats.avg.toFixed(2)} <span class="unit">A avg</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Peak: ${m.stats.max.toFixed(1)}A &bull; ${m.stats.count} samples</div></div>`;
+    }
+    statsHTML += '</div>';
+
+    // Imbalance for groups of 4
+    if (motorStats.length >= 2) {
+      const avgs = motorStats.map(m=>m.stats.avg);
+      const mean = avgs.reduce((a,b)=>a+b,0)/avgs.length;
+      const maxDev = Math.max(...avgs.map(a=>Math.abs(a-mean)));
+      const pctDev = mean>0?(maxDev/mean*100):0;
+      if (pctDev > 25) {
+        const worst = motorStats.reduce((a,b)=>Math.abs(a.stats.avg-mean)>Math.abs(b.stats.avg-mean)?a:b);
+        statsHTML += `<div class="imbalance-banner"><strong>Imbalance: ${pctDev.toFixed(0)}% deviation</strong> &mdash; <strong>${worst.label}</strong> deviates most from mean ${mean.toFixed(2)}A.</div>`;
+      }
+    }
+
+    pnl.innerHTML = statsHTML + '<div class="chart-box"><h3>Current Over Time (A)</h3><canvas id="'+tab.id+'-chart"></canvas></div>';
+
+    // Chart with all motors overlaid
+    const datasets2 = [];
+    let labelsRef = {len:0, arr:[]};
+    motorStats.forEach(m => {
+      if (!m.entry) return;
+      const d = ts2(m.entry.data, toSec);
+      const dd = dsMax(d.times, d.values.map(Math.abs), MAX_PTS);
+      datasets2.push({label:m.label, data:dd.values, borderColor:m.color, borderWidth:1.5, pointRadius:0, tension:0.1, fill:false});
+      if (dd.times.length > labelsRef.len) { labelsRef.len = dd.times.length; labelsRef.arr = dd.times; }
+    });
+    mkChart(pnl.querySelector('#'+tab.id+'-chart'), {
+      type:'line', data:{labels:labelsRef.arr.map(t=>t.toFixed(1)), datasets:datasets2},
+      options:{scales:{
+        x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},
+        y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}
+      },plugins:{legend:{labels:{color:'#e4e4e7'}}}}
+    });
+  }
 }
 
 // ============== POSE ESTIMATION TAB ==============

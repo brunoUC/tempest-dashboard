@@ -427,7 +427,7 @@ function renderPower(panel, P, toSec) {
     {label:'Excursion Peak',data:excPeakPts,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.9)',pointRadius:7,pointStyle:'crossRot',showLine:false,borderWidth:2,order:1},
     {label:'Excursion Avg',data:excAvgPts,borderColor:'#06b6d4',backgroundColor:'rgba(6,182,212,0.7)',pointRadius:5,pointStyle:'circle',showLine:false,borderWidth:1,order:1},
   ]},options:{scales:{
-    x:{title:{display:true,text:'Time in Seconds',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0,max:500},
+    x:{title:{display:true,text:'Time in Seconds',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0,max:30},
     y:{title:{display:true,text:'% of Rated Current (120A)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.05)'},min:100,max:650}
   },plugins:{legend:{labels:{color:'#e4e4e7'}},tooltip:{callbacks:{label:ctx=>{const d=ctx.raw;return `${ctx.dataset.label}: ${d.y.toFixed(0)}% (${(d.y/100*CB285_RATED).toFixed(1)}A) for ${d.x.toFixed(2)}s`;}}}}}});
 

@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tempest Log Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242736;
+      --border: #2e3247;
+      --text: #e4e4e7;
+      --text-muted: #9ca3af;
+      --accent: #3b82f6;
+      --red: #ef4444;
+      --orange: #f97316;
+      --yellow: #eab308;
+      --green: #22c55e;
+      --cyan: #06b6d4;
+      --purple: #a78bfa;
+      --pink: #f472b6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; gap: 16px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; }
+    header .subtitle { color: var(--text-muted); font-size: 12px; }
+    .upload-zone {
+      max-width: 600px; margin: 80px auto; border: 2px dashed var(--border);
+      border-radius: 12px; padding: 60px 40px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); }
+    .upload-zone h2 { margin-bottom: 8px; font-size: 18px; }
+    .upload-zone p { color: var(--text-muted); font-size: 14px; }
+    .upload-zone input { display: none; }
+    .loading { text-align: center; padding: 80px; color: var(--text-muted); font-size: 16px; }
+
+    /* Tabs */
+    .tab-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; gap: 0; overflow-x: auto; padding: 0 16px;
+    }
+    .tab-btn {
+      padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--text-muted);
+      background: none; border: none; border-bottom: 2px solid transparent;
+      cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); background: var(--surface2); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; padding: 24px; }
+    .tab-content.active { display: block; }
+
+    /* Cards & Charts */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px;
+    }
+    .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .stat-card .value { font-size: 24px; font-weight: 700; }
+    .stat-card .unit { font-size: 13px; color: var(--text-muted); font-weight: 400; }
+    .stat-card.danger .value { color: var(--red); }
+    .stat-card.warning .value { color: var(--orange); }
+    .stat-card.ok .value { color: var(--green); }
+    .chart-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px; margin-bottom: 16px;
+    }
+    .chart-box h3 { font-size: 13px; margin-bottom: 10px; color: var(--text-muted); }
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
+    .section-title {
+      font-size: 15px; font-weight: 600; margin: 20px 0 10px;
+      padding-bottom: 6px; border-bottom: 1px solid var(--border);
+    }
+    .banner {
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px;
+    }
+    .banner.danger { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
+    .banner.danger strong { color: var(--red); }
+    .banner.ok { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); }
+    .banner.ok strong { color: var(--green); }
+
+    /* Table */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .data-table th, .data-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    .data-table th { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .data-table tr:hover { background: var(--surface2); }
+    .bar { height: 5px; border-radius: 3px; background: var(--accent); min-width: 2px; }
+    .bar.hot { background: var(--orange); }
+    .bar.danger { background: var(--red); }
+
+    /* Pose timeline */
+    .camera-timeline {
+      display: flex; flex-direction: column; gap: 6px; margin: 12px 0;
+    }
+    .cam-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .cam-label { width: 160px; text-align: right; color: var(--text-muted); flex-shrink: 0; }
+    .cam-track {
+      flex: 1; height: 18px; background: var(--surface2); border-radius: 3px;
+      position: relative; overflow: hidden;
+    }
+    .cam-seg {
+      position: absolute; height: 100%; border-radius: 2px; opacity: 0.85;
+    }
+
+    /* Mechanism error band */
+    .mech-summary { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+    .mech-stat {
+      background: var(--surface2); border-radius: 6px; padding: 8px 14px;
+      font-size: 12px;
+    }
+    .mech-stat .mv { font-size: 18px; font-weight: 700; }
+
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+    .legend span { display: flex; align-items: center; gap: 4px; }
+    .legend .dot { width: 10px; height: 3px; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Tempest Log Dashboard</h1>
+      <div class="subtitle">AdvantageKit .wpilog analyzer</div>
+    </div>
+  </header>
+
+  <div id="upload-section">
+    <div class="upload-zone" id="dropZone">
+      <h2>Drop .wpilog file here</h2>
+      <p>or click to browse</p>
+      <input type="file" id="fileInput" accept=".wpilog" />
+    </div>
+  </div>
+  <div id="loading" class="loading" style="display:none">Parsing log file...</div>
+
+  <div id="app" style="display:none">
+    <div class="tab-bar" id="tabBar"></div>
+    <div id="tabPanels"></div>
+  </div>
+
+<script>
+// ===================== WPILOG PARSER =====================
+class WPILOGParser {
+  constructor(buffer) {
+    this.data = new DataView(buffer);
+    this.bytes = new Uint8Array(buffer);
+    this.pos = 0;
+    this.entries = new Map();
+    this.records = new Map();
+  }
+  parse() {
+    const magic = String.fromCharCode(...this.bytes.slice(0, 6));
+    if (magic !== 'WPILOG') throw new Error('Not a valid .wpilog file');
+    this.pos = 8;
+    const extraLen = this.data.getUint32(this.pos, true);
+    this.pos += 4 + extraLen;
+    while (this.pos < this.bytes.length) {
+      try { this._readRecord(); } catch { break; }
+    }
+  }
+  _readRecord() {
+    const bf = this.bytes[this.pos++];
+    const idLen = (bf & 0x03) + 1, sizeLen = ((bf >> 2) & 0x03) + 1, tsLen = ((bf >> 4) & 0x07) + 1;
+    const entryId = this._readUint(idLen);
+    const payloadSize = this._readUint(sizeLen);
+    const timestamp = this._readUint(tsLen);
+    const ps = this.pos;
+    this.pos += payloadSize;
+    if (entryId === 0) this._ctrl(ps, payloadSize);
+    else this._dataRec(entryId, ps, payloadSize, timestamp);
+  }
+  _readUint(len) {
+    let v = 0;
+    for (let i = 0; i < len; i++) v |= this.bytes[this.pos++] << (i * 8);
+    return v >>> 0;
+  }
+  _ctrl(o, s) {
+    if (this.bytes[o] !== 0) return;
+    const dv = this.data;
+    const eid = dv.getUint32(o+1, true);
+    const nL = dv.getUint32(o+5, true);
+    const name = new TextDecoder().decode(this.bytes.slice(o+9, o+9+nL));
+    const tL = dv.getUint32(o+9+nL, true);
+    const type = new TextDecoder().decode(this.bytes.slice(o+13+nL, o+13+nL+tL));
+    this.entries.set(eid, { name, type });
+    if (!this.records.has(eid)) this.records.set(eid, []);
+  }
+  _dataRec(id, o, s, ts) {
+    const e = this.entries.get(id);
+    if (!e) return;
+    let v;
+    try {
+      switch (e.type) {
+        case 'double': v = this.data.getFloat64(o, true); break;
+        case 'float': v = this.data.getFloat32(o, true); break;
+        case 'int64': v = Number(this.data.getBigInt64(o, true)); break;
+        case 'boolean': v = this.bytes[o] !== 0; break;
+        case 'string': case 'json': v = new TextDecoder().decode(this.bytes.slice(o, o+s)); break;
+        case 'double[]': { v=[]; for(let i=0;i<s/8;i++) v.push(this.data.getFloat64(o+i*8,true)); break; }
+        case 'float[]': { v=[]; for(let i=0;i<s/4;i++) v.push(this.data.getFloat32(o+i*4,true)); break; }
+        default: return;
+      }
+    } catch { return; }
+    this.records.get(id)?.push({ timestamp: ts, value: v });
+  }
+  get(name) {
+    for (const [id, e] of this.entries) {
+      if (e.name === name) return { id, ...e, data: this.records.get(id) || [] };
+    }
+    return null;
+  }
+  match(re) {
+    const r = [];
+    for (const [id, e] of this.entries) if (re.test(e.name)) r.push({ id, ...e, data: this.records.get(id)||[] });
+    return r;
+  }
+}
+
+// ===================== CB285 BREAKER =====================
+const CB285_RATED = 120;
+const CB285_TRIP = [
+  {pct:135,lower:200,upper:600},{pct:150,lower:100,upper:500},{pct:175,lower:40,upper:200},
+  {pct:200,lower:20,upper:80},{pct:250,lower:8,upper:40},{pct:300,lower:5,upper:20},
+  {pct:400,lower:2,upper:8},{pct:500,lower:1,upper:4},{pct:600,lower:0.5,upper:2},
+];
+function getTripTime(amps, bound) {
+  const pct = (amps/CB285_RATED)*100, c=CB285_TRIP;
+  if(pct<=c[0].pct) return Infinity;
+  if(pct>=c[c.length-1].pct) return c[c.length-1][bound];
+  for(let i=0;i<c.length-1;i++){
+    if(pct>=c[i].pct&&pct<=c[i+1].pct){
+      const t=(pct-c[i].pct)/(c[i+1].pct-c[i].pct);
+      return Math.exp(Math.log(c[i][bound])+t*(Math.log(c[i+1][bound])-Math.log(c[i][bound])));
+    }
+  }
+  return c[c.length-1][bound];
+}
+
+// ===================== HELPERS =====================
+function dsMax(times, vals, n) {
+  if(times.length<=n) return {times,values:vals};
+  const step=times.length/n, rt=[], rv=[];
+  for(let i=0;i<n;i++){
+    const s=Math.floor(i*step),e=Math.min(Math.floor((i+1)*step),times.length);
+    let mx=-Infinity,mi=s;
+    for(let j=s;j<e;j++) if(vals[j]>mx){mx=vals[j];mi=j;}
+    rt.push(times[mi]); rv.push(mx);
+  }
+  return {times:rt,values:rv};
+}
+function ds(times,vals,n){
+  if(times.length<=n) return {times,values:vals};
+  const step=times.length/n,rt=[],rv=[];
+  for(let i=0;i<n;i++){const idx=Math.floor(i*step);rt.push(times[idx]);rv.push(vals[idx]);}
+  return {times:rt,values:rv};
+}
+
+const COLORS = ['#3b82f6','#22c55e','#f97316','#ef4444','#a78bfa','#f472b6','#eab308','#06b6d4','#10b981','#f43f5e'];
+const MAX_PTS = 2000;
+let allCharts = [];
+function destroyAll() { allCharts.forEach(c=>c.destroy()); allCharts=[]; }
+function mkChart(ctx, cfg) { cfg.options = cfg.options||{}; cfg.options.animation=false; cfg.options.responsive=true; const c=new Chart(ctx,cfg); allCharts.push(c); return c; }
+
+function timeSeries(data, toSec) {
+  const t=[],v=[];
+  for(const r of data){t.push(toSec(r.timestamp));v.push(r.value);}
+  return {times:t,values:v};
+}
+
+function sustainedPeriods(times,vals) {
+  const thresholds=[130,150,180,210,240,300,360,480,600], pts=[];
+  for(const th of thresholds){
+    let mx=0,start=null;
+    for(let i=0;i<vals.length;i++){
+      if(vals[i]>=th){if(start===null)start=times[i];}
+      else{if(start!==null){mx=Math.max(mx,times[i]-start);start=null;}}
+    }
+    if(start!==null) mx=Math.max(mx,times[times.length-1]-start);
+    if(mx>0.01) pts.push({x:th,y:mx});
+  }
+  return pts;
+}
+
+// ===================== TAB SYSTEM =====================
+const TABS = [];
+function addTab(id, label, renderFn) { TABS.push({id,label,renderFn}); }
+
+function initTabs() {
+  const bar = document.getElementById('tabBar');
+  const panels = document.getElementById('tabPanels');
+  bar.innerHTML = ''; panels.innerHTML = '';
+  TABS.forEach((tab,i) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (i===0?' active':'');
+    btn.textContent = tab.label;
+    btn.onclick = () => {
+      bar.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      panels.querySelectorAll('.tab-content').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-'+tab.id).classList.add('active');
+    };
+    bar.appendChild(btn);
+    const panel = document.createElement('div');
+    panel.id = 'tab-'+tab.id;
+    panel.className = 'tab-content'+(i===0?' active':'');
+    panels.appendChild(panel);
+  });
+}
+
+// ===================== POWER TAB =====================
+function renderPower(panel, P, toSec) {
+  // Total current: use ChannelCurrent sum as primary (more accurate), fallback to TotalCurrent
+  const channelEntry = P.get('/PowerDistribution/ChannelCurrent');
+  const totalEntry = P.get('/PowerDistribution/TotalCurrent');
+  const voltEntry = P.get('/SystemStats/BatteryVoltage') || P.get('/PowerDistribution/Voltage');
+  const battCurrEntry = P.get('/SystemStats/BatteryCurrent');
+
+  let currentTimes=[], currentValues=[];
+
+  // Prefer summing ChannelCurrent for accuracy
+  if (channelEntry && channelEntry.data.length > 0) {
+    for (const r of channelEntry.data) {
+      if (Array.isArray(r.value)) {
+        currentTimes.push(toSec(r.timestamp));
+        currentValues.push(r.value.reduce((a,b)=>a+b, 0));
+      }
+    }
+  }
+  // If ChannelCurrent has fewer points, also overlay TotalCurrent
+  let totalTimes=[], totalValues=[];
+  if (totalEntry && totalEntry.data.length > 0) {
+    for (const r of totalEntry.data) {
+      totalTimes.push(toSec(r.timestamp)); totalValues.push(r.value);
+    }
+  }
+  // Use whichever has more data as primary
+  if (totalTimes.length > currentTimes.length) {
+    currentTimes = totalTimes; currentValues = totalValues;
+  }
+
+  // Channel stats
+  const channelStats = [];
+  if (channelEntry && channelEntry.data.length > 0) {
+    const nc = channelEntry.data[0].value.length;
+    for (let ch=0; ch<nc; ch++) {
+      let sum=0,max=0,count=0;
+      for (const r of channelEntry.data) {
+        if(r.value&&r.value.length>ch){const v=r.value[ch];sum+=v;if(v>max)max=v;count++;}
+      }
+      channelStats.push({channel:ch, avg:count?sum/count:0, max});
+    }
+  }
+
+  // Voltage & battery current
+  const vd = voltEntry ? timeSeries(voltEntry.data, toSec) : {times:[],values:[]};
+  const bd = battCurrEntry ? timeSeries(battCurrEntry.data, toSec) : {times:[],values:[]};
+
+  // Stats
+  const peak = currentValues.length ? Math.max(...currentValues) : 0;
+  const avg = currentValues.length ? currentValues.reduce((a,b)=>a+b,0)/currentValues.length : 0;
+  const dur = currentTimes.length ? currentTimes[currentTimes.length-1]-currentTimes[0] : 0;
+  const minV = vd.values.length ? Math.min(...vd.values) : 0;
+  const avgV = vd.values.length ? vd.values.reduce((a,b)=>a+b,0)/vd.values.length : 0;
+  let t120=0,t240=0,t360=0;
+  for(let i=1;i<currentValues.length;i++){
+    const dt=currentTimes[i]-currentTimes[i-1];
+    if(dt>0&&dt<1){if(currentValues[i]>120)t120+=dt;if(currentValues[i]>240)t240+=dt;if(currentValues[i]>360)t360+=dt;}
+  }
+
+  const peakCls = peak>360?'danger':peak>240?'warning':'ok';
+  const vCls = minV<7?'danger':minV<9?'warning':'ok';
+
+  panel.innerHTML = `
+    <div id="pw-banner"></div>
+    <div class="stats-grid">
+      <div class="stat-card ${peakCls}"><div class="label">Peak Total Current</div><div class="value">${peak.toFixed(1)} <span class="unit">A</span></div></div>
+      <div class="stat-card"><div class="label">Avg Total Current</div><div class="value">${avg.toFixed(1)} <span class="unit">A</span></div></div>
+      <div class="stat-card"><div class="label">Match Duration</div><div class="value">${dur.toFixed(1)} <span class="unit">s</span></div></div>
+      <div class="stat-card ${vCls}"><div class="label">Min Battery Voltage</div><div class="value">${minV.toFixed(2)} <span class="unit">V</span></div></div>
+      <div class="stat-card"><div class="label">Avg Battery Voltage</div><div class="value">${avgV.toFixed(2)} <span class="unit">V</span></div></div>
+      <div class="stat-card ${t120>10?'warning':'ok'}"><div class="label">Time &gt;120A</div><div class="value">${t120.toFixed(1)} <span class="unit">s</span></div></div>
+      <div class="stat-card ${t240>2?'danger':t240>0?'warning':'ok'}"><div class="label">Time &gt;240A (200%)</div><div class="value">${t240.toFixed(1)} <span class="unit">s</span></div></div>
+      <div class="stat-card ${t360>0.5?'danger':'ok'}"><div class="label">Time &gt;360A (300%)</div><div class="value">${t360.toFixed(1)} <span class="unit">s</span></div></div>
+    </div>
+
+    <div class="section-title">Total Current vs CB285 Trip Limits</div>
+    <div class="chart-box"><h3>Total Supply Current (sum of all PDH channels)</h3><canvas id="pwCurrent"></canvas>
+      <div class="legend">
+        <span><div class="dot" style="background:#3b82f6"></div>Total Current</span>
+        <span><div class="dot" style="background:#22c55e"></div>120A Rated</span>
+        <span><div class="dot" style="background:#f97316"></div>162A (135%) Trip Onset</span>
+        <span><div class="dot" style="background:#ef4444"></div>240A / 360A</span>
+      </div>
+    </div>
+
+    <div class="section-title">Breaker Thermal Analysis</div>
+    <div class="chart-box"><h3>Sustained Current vs CB285 Trip Band</h3><canvas id="pwTrip"></canvas></div>
+
+    <div class="section-title">Battery</div>
+    <div class="chart-row">
+      <div class="chart-box"><h3>Battery Voltage</h3><canvas id="pwVolt"></canvas></div>
+      <div class="chart-box"><h3>Battery Current (SystemStats)</h3><canvas id="pwBattCurr"></canvas></div>
+    </div>
+
+    <div class="section-title">Per-Channel PDH Currents</div>
+    <div class="chart-box">
+      <table class="data-table"><thead><tr><th>Ch</th><th>Avg (A)</th><th>Max (A)</th><th>% Total</th><th></th></tr></thead><tbody id="pwChTable"></tbody></table>
+    </div>
+
+    <div class="section-title">Subsystem Currents (actual motor currents only)</div>
+    <div class="chart-box"><h3>Current draw by subsystem</h3><canvas id="pwSub"></canvas></div>
+  `;
+
+  // Banner
+  const bannerEl = panel.querySelector('#pw-banner');
+  if (peak > CB285_RATED * 1.35) {
+    const lo = getTripTime(peak,'lower'), hi = getTripTime(peak,'upper');
+    bannerEl.innerHTML = `<div class="banner danger"><strong>Breaker Trip Risk</strong> &mdash; Peak ${peak.toFixed(1)}A (${((peak/CB285_RATED)*100).toFixed(0)}%). CB285 trips between <strong>${lo.toFixed(1)}s</strong> and <strong>${hi.toFixed(1)}s</strong> at this current. Time above 120A: ${t120.toFixed(1)}s.</div>`;
+  } else {
+    bannerEl.innerHTML = `<div class="banner ok"><strong>Breaker OK</strong> &mdash; Peak ${peak.toFixed(1)}A (${((peak/CB285_RATED)*100).toFixed(0)}% of rated).</div>`;
+  }
+
+  // Current chart
+  const cd = dsMax(currentTimes, currentValues, MAX_PTS);
+  mkChart(panel.querySelector('#pwCurrent'), {
+    type:'line',
+    data:{labels:cd.times.map(t=>t.toFixed(1)), datasets:[{
+      label:'Total Current (A)', data:cd.values, borderColor:'#3b82f6',
+      backgroundColor:'rgba(59,130,246,0.08)', fill:true, borderWidth:1.5, pointRadius:0, tension:0.1
+    }]},
+    options:{
+      scales:{
+        x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},
+        y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}
+      },
+      plugins:{legend:{display:false},annotation:{annotations:{
+        r:{type:'line',yMin:120,yMax:120,borderColor:'#22c55e',borderWidth:2,borderDash:[6,4],label:{display:true,content:'120A Rated',position:'start',backgroundColor:'rgba(34,197,94,0.8)',font:{size:10}}},
+        l:{type:'line',yMin:162,yMax:162,borderColor:'#f97316',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'162A (135%)',position:'start',backgroundColor:'rgba(249,115,22,0.8)',font:{size:10}}},
+        u2:{type:'line',yMin:240,yMax:240,borderColor:'#ef4444',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'240A (200%)',position:'start',backgroundColor:'rgba(239,68,68,0.8)',font:{size:10}}},
+        u3:{type:'line',yMin:360,yMax:360,borderColor:'#ef4444',borderWidth:1,borderDash:[2,4],label:{display:true,content:'360A (300%)',position:'end',backgroundColor:'rgba(239,68,68,0.6)',font:{size:10}}}
+      }}}
+    }
+  });
+
+  // Trip curve scatter
+  const sp = sustainedPeriods(currentTimes, currentValues);
+  mkChart(panel.querySelector('#pwTrip'), {
+    type:'scatter',
+    data:{datasets:[
+      {label:'Trip Lower Limit',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.lower})),borderColor:'#f97316',showLine:true,borderWidth:2,pointRadius:3,fill:false},
+      {label:'Trip Upper Limit',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.upper})),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',showLine:true,borderWidth:2,pointRadius:3,fill:'-1'},
+      {label:'Your Robot',data:sp,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.8)',pointRadius:6,pointStyle:'crossRot',showLine:false}
+    ]},
+    options:{
+      scales:{
+        x:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:120},
+        y:{type:'logarithmic',title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0.1,max:1000}
+      },
+      plugins:{legend:{labels:{color:'#e4e4e7'}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.x.toFixed(0)}A for ${c.parsed.y.toFixed(1)}s`}}}
+    }
+  });
+
+  // Voltage
+  if(vd.times.length){
+    const vv=dsMax(vd.times,vd.values,MAX_PTS);
+    mkChart(panel.querySelector('#pwVolt'),{type:'line',data:{labels:vv.times.map(t=>t.toFixed(1)),datasets:[{data:vv.values,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},suggestedMin:6,suggestedMax:14}},plugins:{legend:{display:false}}}});
+  }
+
+  // Battery current
+  if(bd.times.length){
+    const bb=dsMax(bd.times,bd.values,MAX_PTS);
+    mkChart(panel.querySelector('#pwBattCurr'),{type:'line',data:{labels:bb.times.map(t=>t.toFixed(1)),datasets:[{data:bb.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});
+  }
+
+  // Channel table
+  const tbody = panel.querySelector('#pwChTable');
+  const totalAvg = channelStats.reduce((s,c)=>s+c.avg,0);
+  const sorted = [...channelStats].sort((a,b)=>b.avg-a.avg);
+  const maxAvg = sorted.length?sorted[0].avg:1;
+  for(const ch of sorted){
+    if(ch.avg<0.01&&ch.max<0.1) continue;
+    const pct = totalAvg>0?(ch.avg/totalAvg*100):0;
+    const cls = ch.max>40?'danger':ch.max>20?'hot':'';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>Ch ${ch.channel}</td><td>${ch.avg.toFixed(2)}</td><td>${ch.max.toFixed(1)}</td><td>${pct.toFixed(1)}%</td><td><div class="bar ${cls}" style="width:${(ch.avg/maxAvg*100).toFixed(0)}%"></div></td>`;
+    tbody.appendChild(tr);
+  }
+
+  // Subsystem currents - ONLY use actual current fields
+  const subDefs = [
+    {name:'Drive (all)', entries:[/\/Drive\/Module\d+\/DriveCurrentAmps/]},
+    {name:'Turn (all)', entries:[/\/Drive\/Module\d+\/TurnCurrentAmps/]},
+    {name:'Extensor', entries:[/\/Subsystems\/Extensor\/ExtensorCurrent$/]},
+    {name:'Spindexer', entries:[/\/Subsystems\/Spindexer\/SpindexerCurrent$/]},
+    {name:'Roller', entries:[/\/Subsystems\/Roller\/RollerCurrent$/]},
+    {name:'Kicker', entries:[/\/Subsystems\/Kicker\/KickerCurrent$/]},
+    {name:'Climber', entries:[/\/Subsystems\/Climber\/ClimberCurrent$/]},
+    {name:'Turret', entries:[/\/Subsystems\/Shooter\/Turret\/\/Current$/]},
+  ];
+  const subDS=[], subLabelsRef={len:0,arr:[]};
+  subDefs.forEach((sd,si)=>{
+    let allE=[];
+    sd.entries.forEach(re=>{allE=allE.concat(P.match(re));});
+    if(!allE.length) return;
+    // Sum per 20ms bucket
+    const buckets=new Map();
+    for(const e of allE) for(const r of e.data){
+      if(typeof r.value!=='number') continue;
+      const t=Math.round(toSec(r.timestamp)/0.02)*0.02;
+      buckets.set(t,(buckets.get(t)||0)+r.value);
+    }
+    const s=[...buckets.entries()].sort((a,b)=>a[0]-b[0]);
+    const t=s.map(x=>x[0]),v=s.map(x=>x[1]);
+    const d=dsMax(t,v,MAX_PTS);
+    subDS.push({label:sd.name,data:d.values,borderColor:COLORS[si%COLORS.length],borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});
+    if(d.times.length>subLabelsRef.len){subLabelsRef.len=d.times.length;subLabelsRef.arr=d.times;}
+  });
+  mkChart(panel.querySelector('#pwSub'),{type:'line',data:{labels:subLabelsRef.arr.map(t=>t.toFixed(1)),datasets:subDS},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
+}
+
+// ===================== POSE ESTIMATION TAB =====================
+function renderPose(panel, P, toSec) {
+  const currentEst = P.get('/RealOutputs/PoseEstimator/CurrentPoseEstimator');
+  const cameras = [
+    {key:'Arducam_Front_Left', label:'Arducam Front Left', color:'#3b82f6',
+     pose:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Left/EstimatedPose'),
+     state:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Left/StateMeasure')},
+    {key:'Arducam_Front_Right', label:'Arducam Front Right', color:'#22c55e',
+     pose:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Right/EstimatedPose'),
+     state:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Right/StateMeasure')},
+    {key:'limelight-bleft', label:'Limelight Back-Left', color:'#f97316',
+     pose:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bleft/Pose'),
+     state:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bleft/State')},
+    {key:'limelight-bright', label:'Limelight Back-Right', color:'#ef4444',
+     pose:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bright/Pose'),
+     state:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bright/State')},
+  ];
+
+  const visionPose = P.get('/RealOutputs/Vision/PoseSentToEstimator');
+  const odometryPose = P.get('/RealOutputs/Odometry/Robot');
+  const visionPoseVision = P.get('/RealOutputs/Odometry/PoseVision');
+  const stdDevX = P.get('/RealOutputs/Vision/VisionStandardDeviationX');
+  const stdDevY = P.get('/RealOutputs/Vision/VisionStandardDeviationY');
+  const stdDevZ = P.get('/RealOutputs/Vision/VisionStandardDeviationZ');
+
+  // Compute timeline extents
+  let minT=Infinity, maxT=0;
+  cameras.forEach(c=>{
+    if(c.state&&c.state.data.length){
+      const t0=toSec(c.state.data[0].timestamp), t1=toSec(c.state.data[c.state.data.length-1].timestamp);
+      if(t0<minT)minT=t0; if(t1>maxT)maxT=t1;
+    }
+  });
+  if(currentEst&&currentEst.data.length){
+    const t0=toSec(currentEst.data[0].timestamp), t1=toSec(currentEst.data[currentEst.data.length-1].timestamp);
+    if(t0<minT)minT=t0; if(t1>maxT)maxT=t1;
+  }
+  const totalSpan = maxT-minT||1;
+
+  // Camera usage stats
+  let camStats = cameras.map(c=>{
+    let active=0, total=0;
+    if(c.state&&c.state.data.length){
+      for(let i=1;i<c.state.data.length;i++){
+        const dt=toSec(c.state.data[i].timestamp)-toSec(c.state.data[i-1].timestamp);
+        if(dt>0&&dt<1){
+          total+=dt;
+          const v=c.state.data[i-1].value;
+          if(v&&v!=='NULL'&&v!=='IDLE'&&v!=='NO_TARGET'&&v!=='') active+=dt;
+        }
+      }
+    }
+    return {...c, activeTime:active, totalTime:total};
+  });
+
+  // Current estimator timeline
+  let estStats = {};
+  if(currentEst&&currentEst.data.length){
+    for(let i=1;i<currentEst.data.length;i++){
+      const dt=toSec(currentEst.data[i].timestamp)-toSec(currentEst.data[i-1].timestamp);
+      const v=currentEst.data[i-1].value;
+      if(dt>0&&dt<1&&v){estStats[v]=(estStats[v]||0)+dt;}
+    }
+  }
+
+  panel.innerHTML = `
+    <div class="section-title">Active Pose Estimator</div>
+    <div class="stats-grid" id="poseEstStats"></div>
+
+    <div class="section-title">Camera Activity Timeline</div>
+    <div class="chart-box">
+      <h3>Which cameras were providing pose estimates over time</h3>
+      <div class="camera-timeline" id="camTimeline"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;font-size:11px;color:var(--text-muted)">
+        <span>0s</span><span style="flex:1;text-align:center">${(totalSpan/2).toFixed(0)}s</span><span>${totalSpan.toFixed(0)}s</span>
+      </div>
+    </div>
+
+    <div class="section-title">Camera Usage Summary</div>
+    <div class="stats-grid" id="camUsageStats"></div>
+
+    <div class="section-title">Vision Standard Deviations</div>
+    <div class="chart-box"><h3>Vision measurement uncertainty over time</h3><canvas id="poseStdDev"></canvas></div>
+
+    <div class="section-title">Current Pose Estimator Over Time</div>
+    <div class="chart-box"><h3>Active estimator source</h3><canvas id="poseEstChart"></canvas></div>
+  `;
+
+  // Estimator stats
+  const estGrid = panel.querySelector('#poseEstStats');
+  const totalEst = Object.values(estStats).reduce((a,b)=>a+b,0);
+  let estHTML = '';
+  for(const [name,time] of Object.entries(estStats).sort((a,b)=>b[1]-a[1])){
+    estHTML+=`<div class="stat-card"><div class="label">${name}</div><div class="value">${time.toFixed(1)} <span class="unit">s (${(time/totalEst*100).toFixed(0)}%)</span></div></div>`;
+  }
+  estGrid.innerHTML = estHTML;
+
+  // Camera timeline
+  const tlEl = panel.querySelector('#camTimeline');
+  cameras.forEach(cam=>{
+    if(!cam.state||!cam.state.data.length) return;
+    const row = document.createElement('div'); row.className='cam-row';
+    const lbl = document.createElement('div'); lbl.className='cam-label'; lbl.textContent=cam.label;
+    const track = document.createElement('div'); track.className='cam-track';
+
+    // Find active segments
+    let segStart=null;
+    for(let i=0;i<cam.state.data.length;i++){
+      const t=toSec(cam.state.data[i].timestamp);
+      const v=cam.state.data[i].value;
+      const isActive = v&&v!=='NULL'&&v!=='IDLE'&&v!=='NO_TARGET'&&v!=='';
+      if(isActive&&segStart===null) segStart=t;
+      else if(!isActive&&segStart!==null){
+        const seg=document.createElement('div'); seg.className='cam-seg';
+        seg.style.left=((segStart-minT)/totalSpan*100)+'%';
+        seg.style.width=(Math.max((t-segStart)/totalSpan*100,0.3))+'%';
+        seg.style.background=cam.color;
+        seg.title=`${cam.label}: ${segStart.toFixed(1)}s - ${t.toFixed(1)}s`;
+        track.appendChild(seg);
+        segStart=null;
+      }
+    }
+    if(segStart!==null){
+      const t=toSec(cam.state.data[cam.state.data.length-1].timestamp);
+      const seg=document.createElement('div'); seg.className='cam-seg';
+      seg.style.left=((segStart-minT)/totalSpan*100)+'%';
+      seg.style.width=(Math.max((t-segStart)/totalSpan*100,0.3))+'%';
+      seg.style.background=cam.color;
+      track.appendChild(seg);
+    }
+    row.appendChild(lbl); row.appendChild(track); tlEl.appendChild(row);
+  });
+
+  // Camera usage stats
+  const usageGrid = panel.querySelector('#camUsageStats');
+  usageGrid.innerHTML = camStats.map(c=>`
+    <div class="stat-card"><div class="label" style="color:${c.color}">${c.label}</div>
+    <div class="value">${c.activeTime.toFixed(1)} <span class="unit">s active</span></div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${c.totalTime>0?((c.activeTime/c.totalTime*100).toFixed(0)):0}% of tracked time</div></div>
+  `).join('');
+
+  // Std dev chart
+  if(stdDevX&&stdDevX.data.length){
+    const sx=timeSeries(stdDevX.data,toSec), sy=timeSeries(stdDevY.data,toSec);
+    const dsx=ds(sx.times,sx.values,MAX_PTS), dsy=ds(sy.times,sy.values,MAX_PTS);
+    mkChart(panel.querySelector('#poseStdDev'),{type:'line',data:{labels:dsx.times.map(t=>t.toFixed(1)),datasets:[
+      {label:'Std Dev X',data:dsx.values,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false},
+      {label:'Std Dev Y',data:dsy.values,borderColor:'#22c55e',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false},
+    ]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
+  }
+
+  // Estimator over time (encode as numeric for chart)
+  if(currentEst&&currentEst.data.length){
+    const estNames=[...new Set(currentEst.data.map(r=>r.value))].filter(Boolean).sort();
+    const estMap={}; estNames.forEach((n,i)=>{estMap[n]=i;});
+    const t=[],v=[];
+    for(const r of currentEst.data){t.push(toSec(r.timestamp));v.push(estMap[r.value]??-1);}
+    const dd=ds(t,v,MAX_PTS);
+    mkChart(panel.querySelector('#poseEstChart'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{
+      data:dd.values,borderColor:'#06b6d4',borderWidth:2,pointRadius:0,stepped:true,fill:false
+    }]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af',callback:v=>{const i=Math.round(v);return estNames[i]||'';},stepSize:1},grid:{color:'rgba(255,255,255,0.05)'},min:-0.5,max:estNames.length-0.5}},plugins:{legend:{display:false}}}});
+  }
+}
+
+// ===================== MECHANISM TAB =====================
+function renderMechanism(panel, P, toSec, config) {
+  // config: {title, setpoint, current, atTarget?, current2?(for current draw), velocity?, voltage?}
+  const sp = config.setpoint ? P.get(config.setpoint) : null;
+  const cur = config.current ? P.get(config.current) : null;
+  const at = config.atTarget ? P.get(config.atTarget) : null;
+  const err = config.error ? P.get(config.error) : null;
+  const motorCur = config.motorCurrent ? P.get(config.motorCurrent) : null;
+  const vel = config.velocity ? P.get(config.velocity) : null;
+  const volt = config.voltage ? P.get(config.voltage) : null;
+  const state = config.state ? P.get(config.state) : null;
+
+  // Compute stats
+  let atTargetPct = 0, atTargetTime = 0, totalTime = 0;
+  if (at && at.data.length) {
+    for(let i=1;i<at.data.length;i++){
+      const dt=toSec(at.data[i].timestamp)-toSec(at.data[i-1].timestamp);
+      if(dt>0&&dt<1){totalTime+=dt;if(at.data[i-1].value)atTargetTime+=dt;}
+    }
+    atTargetPct = totalTime>0?(atTargetTime/totalTime*100):0;
+  }
+
+  let maxErr=0,avgErr=0;
+  if(err&&err.data.length){
+    let s=0;
+    for(const r of err.data){const e=Math.abs(r.value);s+=e;if(e>maxErr)maxErr=e;}
+    avgErr=s/err.data.length;
+  } else if(sp&&cur&&sp.data.length&&cur.data.length){
+    // Compute error from setpoint-current at matching timestamps (approximate)
+    // Use a simple approach: for each current sample, find nearest setpoint
+    let spIdx=0, s=0, count=0;
+    for(const r of cur.data){
+      while(spIdx<sp.data.length-1&&sp.data[spIdx+1].timestamp<=r.timestamp) spIdx++;
+      const e=Math.abs(sp.data[spIdx].value-r.value);
+      s+=e;if(e>maxErr)maxErr=e;count++;
+    }
+    avgErr=count>0?s/count:0;
+  }
+
+  const atCls = atTargetPct>90?'ok':atTargetPct>70?'warning':'danger';
+
+  panel.innerHTML = `
+    <div class="section-title">${config.title}</div>
+    <div class="stats-grid">
+      ${at?`<div class="stat-card ${atCls}"><div class="label">At Target</div><div class="value">${atTargetPct.toFixed(1)} <span class="unit">%</span></div></div>`:''}
+      ${at?`<div class="stat-card"><div class="label">Time at Target</div><div class="value">${atTargetTime.toFixed(1)} <span class="unit">s / ${totalTime.toFixed(1)}s</span></div></div>`:''}
+      <div class="stat-card ${maxErr>5?'danger':maxErr>2?'warning':'ok'}"><div class="label">Max Error</div><div class="value">${maxErr.toFixed(2)} <span class="unit">${config.unit||''}</span></div></div>
+      <div class="stat-card"><div class="label">Avg Error</div><div class="value">${avgErr.toFixed(3)} <span class="unit">${config.unit||''}</span></div></div>
+    </div>
+
+    <div class="chart-box">
+      <h3>Setpoint vs Actual ${config.unit?'('+config.unit+')':''}</h3>
+      <canvas id="mechMain"></canvas>
+      <div class="legend">
+        <span><div class="dot" style="background:#f97316"></div>Setpoint</span>
+        <span><div class="dot" style="background:#3b82f6"></div>Actual</span>
+        ${at?'<span><div class="dot" style="background:rgba(34,197,94,0.2)"></div>At Target (green bg)</span>':''}
+      </div>
+    </div>
+
+    ${err?`<div class="chart-box"><h3>Error Over Time</h3><canvas id="mechErr"></canvas></div>`:''}
+
+    <div class="chart-row">
+      ${motorCur?`<div class="chart-box"><h3>Motor Current (A)</h3><canvas id="mechCurr"></canvas></div>`:''}
+      ${vel?`<div class="chart-box"><h3>Velocity</h3><canvas id="mechVel"></canvas></div>`:''}
+    </div>
+
+    ${volt?`<div class="chart-box"><h3>Applied Voltage</h3><canvas id="mechVolt"></canvas></div>`:''}
+
+    ${state?`<div class="chart-box"><h3>State Over Time</h3><canvas id="mechState"></canvas></div>`:''}
+  `;
+
+  // Main setpoint vs actual chart
+  const datasets = [];
+  let labels = [];
+  if(sp&&sp.data.length){
+    const d=timeSeries(sp.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
+    datasets.push({label:'Setpoint',data:dd.values,borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.1,fill:false,stepped:config.stepped||false});
+    if(dd.times.length>labels.length)labels=dd.times;
+  }
+  if(cur&&cur.data.length){
+    const d=timeSeries(cur.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
+    datasets.push({label:'Actual',data:dd.values,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});
+    if(dd.times.length>labels.length)labels=dd.times;
+  }
+
+  // At-target background annotation boxes
+  let annotations = {};
+  if(at&&at.data.length){
+    let segStart=null, segIdx=0;
+    for(let i=0;i<at.data.length;i++){
+      const t=toSec(at.data[i].timestamp);
+      if(at.data[i].value&&segStart===null) segStart=t;
+      else if(!at.data[i].value&&segStart!==null){
+        annotations['at'+segIdx++]={type:'box',xMin:segStart.toFixed(1),xMax:t.toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};
+        segStart=null;
+      }
+    }
+    if(segStart!==null){
+      const t=toSec(at.data[at.data.length-1].timestamp);
+      annotations['at'+segIdx]={type:'box',xMin:segStart.toFixed(1),xMax:t.toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};
+    }
+  }
+
+  mkChart(panel.querySelector('#mechMain'),{type:'line',data:{labels:labels.map(t=>t.toFixed(1)),datasets},options:{
+    scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:config.unit||'',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},
+    plugins:{legend:{labels:{color:'#e4e4e7'}},annotation:{annotations}}
+  }});
+
+  // Error chart
+  if(err&&err.data.length&&panel.querySelector('#mechErr')){
+    const d=timeSeries(err.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
+    mkChart(panel.querySelector('#mechErr'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});
+  }
+
+  // Motor current
+  if(motorCur&&motorCur.data.length&&panel.querySelector('#mechCurr')){
+    const d=timeSeries(motorCur.data,toSec), dd=dsMax(d.times,d.values,MAX_PTS);
+    mkChart(panel.querySelector('#mechCurr'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});
+  }
+
+  // Velocity
+  if(vel&&vel.data.length&&panel.querySelector('#mechVel')){
+    const d=timeSeries(vel.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
+    mkChart(panel.querySelector('#mechVel'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#06b6d4',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});
+  }
+
+  // Voltage
+  if(volt&&volt.data.length&&panel.querySelector('#mechVolt')){
+    const d=timeSeries(volt.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
+    mkChart(panel.querySelector('#mechVolt'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#eab308',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});
+  }
+
+  // State
+  if(state&&state.data.length&&panel.querySelector('#mechState')){
+    const stNames=[...new Set(state.data.map(r=>r.value))].filter(Boolean).sort();
+    const stMap={}; stNames.forEach((n,i)=>{stMap[n]=i;});
+    const t=[],v=[];
+    for(const r of state.data){t.push(toSec(r.timestamp));v.push(stMap[r.value]??-1);}
+    const dd=ds(t,v,MAX_PTS);
+    mkChart(panel.querySelector('#mechState'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#a78bfa',borderWidth:2,pointRadius:0,stepped:true,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af',callback:v=>{const i=Math.round(v);return stNames[i]||'';},stepSize:1},grid:{color:'rgba(255,255,255,0.05)'},min:-0.5,max:stNames.length-0.5}},plugins:{legend:{display:false}}}});
+  }
+}
+
+// ===================== MECHANISM CONFIGS =====================
+const MECHANISMS = [
+  {
+    id:'shooter', label:'Shooter',
+    tabs:[
+      {id:'hood', title:'Hood', setpoint:'/Subsystems/Shooter/Hood//TargetAngle', current:'/Subsystems/Shooter/Hood//CurrentAngle',
+       atTarget:'/Subsystems/Shooter/Hood//AtTarget', error:'/Subsystems/Shooter/Hood//AngleError', unit:'deg',
+       state:'/RealOutputs/States/HoodState'},
+      {id:'turret', title:'Turret', setpoint:'/Subsystems/Shooter/Turret//TargetAngle', current:'/Subsystems/Shooter/Turret//CurrentAngle',
+       atTarget:'/Subsystems/Shooter/Turret//AtTarget', motorCurrent:'/Subsystems/Shooter/Turret//Current',
+       voltage:'/Subsystems/Shooter/Turret//Voltage', unit:'deg',
+       state:'/RealOutputs/States/TurretState'},
+      {id:'flywheels', title:'Flywheels', setpoint:'/Subsystems/Shooter/FlyWheels//TargetVelocity', current:'/Subsystems/Shooter/FlyWheels//CurrentVelocity',
+       atTarget:'/Subsystems/Shooter/FlyWheels//AtTarget', unit:'RPM',
+       state:'/RealOutputs/States/FlyWheelState'},
+    ]
+  },
+  {
+    id:'extensor', label:'Extensor',
+    tabs:[{id:'ext', title:'Extensor', setpoint:'/Subsystems/Extensor/ExtensorSetpoint', current:'/Subsystems/Extensor/ExtensorPosition',
+      motorCurrent:'/Subsystems/Extensor/ExtensorCurrent', velocity:'/Subsystems/Extensor/ExtensorVelocity',
+      voltage:'/Subsystems/Extensor/ExtensorVoltage', unit:'pos',
+      state:'/RealOutputs/States/ExtensorState'}]
+  },
+  {
+    id:'climber', label:'Climber',
+    tabs:[{id:'clmb', title:'Climber', setpoint:'/Subsystems/Climber/ClimberSetpoint', current:'/Subsystems/Climber/ClimberPosition',
+      motorCurrent:'/Subsystems/Climber/ClimberCurrent', velocity:'/Subsystems/Climber/ClimberVelocity',
+      unit:'pos', state:'/RealOutputs/States/ClimberState'}]
+  },
+  {
+    id:'kicker', label:'Kicker',
+    tabs:[{id:'kick', title:'Kicker', setpoint:'/Subsystems/Kicker/KickerSetpoint', current:'/Subsystems/Kicker/KickerPosition',
+      motorCurrent:'/Subsystems/Kicker/KickerCurrent', velocity:'/Subsystems/Kicker/KickerVelocity',
+      unit:'pos', state:'/RealOutputs/States/KickersState'}]
+  },
+  {
+    id:'roller', label:'Roller',
+    tabs:[{id:'roll', title:'Roller', setpoint:'/Subsystems/Roller/RollerSetpoint', current:'/Subsystems/Roller/RollerPosition',
+      motorCurrent:'/Subsystems/Roller/RollerCurrent', velocity:'/Subsystems/Roller/RollerVelocity',
+      voltage:'/Subsystems/Roller/RollerVoltage', unit:'pos',
+      state:'/RealOutputs/States/RollerState'}]
+  },
+  {
+    id:'spindexer', label:'Spindexer',
+    tabs:[{id:'spin', title:'Spindexer', setpoint:'/Subsystems/Spindexer/SpindexerSetpoint', current:'/Subsystems/Spindexer/SpindexerPosition',
+      motorCurrent:'/Subsystems/Spindexer/SpindexerCurrent', velocity:'/Subsystems/Spindexer/SpindexerVelocity',
+      unit:'pos', state:'/RealOutputs/States/SpindexerState'}]
+  },
+];
+
+// ===================== FILE HANDLING =====================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const uploadSection = document.getElementById('upload-section');
+const loadingDiv = document.getElementById('loading');
+const app = document.getElementById('app');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); if(e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if(fileInput.files.length) loadFile(fileInput.files[0]); });
+
+function loadFile(file) {
+  uploadSection.style.display='none'; loadingDiv.style.display='block'; app.style.display='none';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const P = new WPILOGParser(e.target.result);
+      P.parse();
+      loadingDiv.style.display='none'; app.style.display='block';
+      buildDashboard(P);
+    } catch(err) {
+      loadingDiv.textContent='Error: '+err.message; console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function buildDashboard(P) {
+  destroyAll();
+  TABS.length = 0;
+
+  // Find min timestamp
+  let minTs=Infinity;
+  for(const [,recs] of P.records) if(recs.length&&recs[0].timestamp<minTs) minTs=recs[0].timestamp;
+  const toSec = ts => (ts-minTs)/1e6;
+
+  // Register tabs
+  addTab('power','Power',panel=>renderPower(panel,P,toSec));
+  addTab('pose','Pose Estimation',panel=>renderPose(panel,P,toSec));
+
+  for(const mech of MECHANISMS){
+    if(mech.tabs.length===1){
+      addTab(mech.id, mech.label, panel=>renderMechanism(panel,P,toSec,mech.tabs[0]));
+    } else {
+      // Multi-sub mechanism (Shooter has Hood, Turret, Flywheels)
+      addTab(mech.id, mech.label, panel=>{
+        panel.innerHTML = '<div class="tab-bar" id="sub-'+mech.id+'-bar"></div><div id="sub-'+mech.id+'-panels"></div>';
+        const subBar = panel.querySelector('#sub-'+mech.id+'-bar');
+        const subPanels = panel.querySelector('#sub-'+mech.id+'-panels');
+        mech.tabs.forEach((st,si)=>{
+          const btn=document.createElement('button');
+          btn.className='tab-btn'+(si===0?' active':'');
+          btn.textContent=st.title;
+          btn.onclick=()=>{
+            subBar.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+            subPanels.querySelectorAll('.tab-content').forEach(p=>p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('subtab-'+st.id).classList.add('active');
+          };
+          subBar.appendChild(btn);
+          const sp=document.createElement('div');
+          sp.id='subtab-'+st.id;
+          sp.className='tab-content'+(si===0?' active':'');
+          subPanels.appendChild(sp);
+          renderMechanism(sp,P,toSec,st);
+        });
+      });
+    }
+  }
+
+  initTabs();
+  // Render first tab
+  TABS[0].renderFn(document.getElementById('tab-'+TABS[0].id));
+  // Lazy render other tabs on first click
+  const rendered = new Set([TABS[0].id]);
+  document.querySelectorAll('.tab-btn').forEach((btn,i)=>{
+    const origClick = btn.onclick;
+    btn.onclick = () => {
+      origClick();
+      if(!rendered.has(TABS[i].id)){
+        rendered.add(TABS[i].id);
+        TABS[i].renderFn(document.getElementById('tab-'+TABS[i].id));
+      }
+    };
+  });
+}
+</script>
+</body>
+</html>

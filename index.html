@@ -251,9 +251,12 @@ function mkChart(el,cfg){
 }
 function ts2(data,toSec){const t=[],v=[];for(const r of data){t.push(toSec(r.timestamp));v.push(r.value);}return{times:t,values:v};}
 // Find every excursion above rated current — returns [{duration, peakCurrent, avgCurrent, startTime}]
+// Merges gaps shorter than mergeGap (default 0.5s) so brief dips in noisy data don't split one long excursion into many short ones
 function findExcursions(t, v, threshold) {
   threshold = threshold || CB285_RATED;
-  const excursions = [];
+  const MERGE_GAP = 0.5; // seconds — dips below threshold shorter than this get merged
+  // First pass: find raw segments above threshold
+  const raw = [];
   let start = null, peak = 0, sum = 0, count = 0;
   for (let i = 0; i < v.length; i++) {
     if (v[i] >= threshold) {
@@ -262,17 +265,39 @@ function findExcursions(t, v, threshold) {
       sum += v[i]; count++;
     } else {
       if (start !== null) {
-        const dur = t[i] - t[start];
-        if (dur > 0.05) excursions.push({ duration: dur, peakCurrent: peak, avgCurrent: sum / count, startTime: t[start] });
+        raw.push({ startIdx: start, endIdx: i, peak, sum, count });
         start = null;
       }
     }
   }
-  if (start !== null) {
-    const dur = t[t.length - 1] - t[start];
-    if (dur > 0.05) excursions.push({ duration: dur, peakCurrent: peak, avgCurrent: sum / count, startTime: t[start] });
+  if (start !== null) raw.push({ startIdx: start, endIdx: v.length - 1, peak, sum, count });
+
+  // Second pass: merge segments separated by gaps shorter than MERGE_GAP
+  const merged = [];
+  for (const seg of raw) {
+    if (merged.length && t[seg.startIdx] - t[merged[merged.length-1].endIdx] < MERGE_GAP) {
+      const prev = merged[merged.length-1];
+      // Include the gap samples in the merged excursion
+      for (let j = prev.endIdx; j < seg.startIdx; j++) { prev.sum += v[j]; prev.count++; }
+      prev.endIdx = seg.endIdx;
+      prev.peak = Math.max(prev.peak, seg.peak);
+      prev.sum += seg.sum;
+      prev.count += seg.count;
+    } else {
+      merged.push({ ...seg });
+    }
   }
-  return excursions;
+
+  // Convert to output format
+  return merged.filter(s => {
+    const dur = t[s.endIdx] - t[s.startIdx];
+    return dur > 0.1;
+  }).map(s => ({
+    duration: t[s.endIdx] - t[s.startIdx],
+    peakCurrent: s.peak,
+    avgCurrent: s.sum / s.count,
+    startTime: t[s.startIdx],
+  }));
 }
 
 // State color palette for discrete charts

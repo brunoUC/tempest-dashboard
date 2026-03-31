@@ -167,19 +167,19 @@ const CB285_RATED=120;
 // CB285-120 trip curve read from datasheet: Time vs % of Rated Current
 // lower = left curve (minimum time to trip), upper = right curve (maximum time to trip)
 const CB285_TRIP=[
-  {pct:125,lower:300,upper:500},
-  {pct:135,lower:150,upper:400},
-  {pct:150,lower:60,upper:250},
-  {pct:175,lower:25,upper:100},
-  {pct:200,lower:15,upper:65},
-  {pct:225,lower:10,upper:40},
-  {pct:250,lower:7,upper:30},
-  {pct:300,lower:4.5,upper:18},
-  {pct:350,lower:3,upper:12},
-  {pct:400,lower:2,upper:8},
-  {pct:450,lower:1.5,upper:5.5},
-  {pct:500,lower:1,upper:4},
-  {pct:550,lower:0.7,upper:2.8},
+  {pct:125,lower:200,upper:500},
+  {pct:135,lower:100,upper:400},
+  {pct:150,lower:40,upper:200},
+  {pct:175,lower:18,upper:80},
+  {pct:200,lower:10,upper:50},
+  {pct:225,lower:7,upper:35},
+  {pct:250,lower:5,upper:25},
+  {pct:300,lower:3.5,upper:15},
+  {pct:350,lower:2.5,upper:10},
+  {pct:400,lower:2,upper:7},
+  {pct:450,lower:1.3,upper:5},
+  {pct:500,lower:1,upper:3.5},
+  {pct:550,lower:0.7,upper:2.5},
   {pct:600,lower:0.5,upper:2},
 ];
 function getTripTime(a,b){const p=(a/CB285_RATED)*100,c=CB285_TRIP;if(p<=c[0].pct)return Infinity;if(p>=c[c.length-1].pct)return c[c.length-1][b];for(let i=0;i<c.length-1;i++){if(p>=c[i].pct&&p<=c[i+1].pct){const t=(p-c[i].pct)/(c[i+1].pct-c[i].pct);return Math.exp(Math.log(c[i][b])+t*(Math.log(c[i+1][b])-Math.log(c[i][b])));}}return c[c.length-1][b];}

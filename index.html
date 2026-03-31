@@ -233,7 +233,30 @@ function mkChart(el,cfg){
   return c;
 }
 function ts2(data,toSec){const t=[],v=[];for(const r of data){t.push(toSec(r.timestamp));v.push(r.value);}return{times:t,values:v};}
-function sustainedPeriods(t,v){const th=[130,150,180,210,240,300,360,480,600],pts=[];for(const h of th){let mx=0,s=null;for(let i=0;i<v.length;i++){if(v[i]>=h){if(s===null)s=t[i];}else{if(s!==null){mx=Math.max(mx,t[i]-s);s=null;}}}if(s!==null)mx=Math.max(mx,t[t.length-1]-s);if(mx>0.01)pts.push({x:h,y:mx});}return pts;}
+// Find every excursion above rated current — returns [{duration, peakCurrent, avgCurrent, startTime}]
+function findExcursions(t, v, threshold) {
+  threshold = threshold || CB285_RATED;
+  const excursions = [];
+  let start = null, peak = 0, sum = 0, count = 0;
+  for (let i = 0; i < v.length; i++) {
+    if (v[i] >= threshold) {
+      if (start === null) { start = i; peak = 0; sum = 0; count = 0; }
+      if (v[i] > peak) peak = v[i];
+      sum += v[i]; count++;
+    } else {
+      if (start !== null) {
+        const dur = t[i] - t[start];
+        if (dur > 0.05) excursions.push({ duration: dur, peakCurrent: peak, avgCurrent: sum / count, startTime: t[start] });
+        start = null;
+      }
+    }
+  }
+  if (start !== null) {
+    const dur = t[t.length - 1] - t[start];
+    if (dur > 0.05) excursions.push({ duration: dur, peakCurrent: peak, avgCurrent: sum / count, startTime: t[start] });
+  }
+  return excursions;
+}
 
 // State color palette for discrete charts
 const STATE_COLORS = {
@@ -349,7 +372,9 @@ function renderPower(panel, P, toSec) {
     <div class="chart-box"><h3>Total Supply Current (sum of all PDH channels)</h3><canvas id="pwCurrent"></canvas>
       <div class="legend"><span><div class="dot" style="background:#3b82f6"></div>Total Current</span><span><div class="dot" style="background:#22c55e"></div>120A Rated</span><span><div class="dot" style="background:#f97316"></div>162A (135%)</span><span><div class="dot" style="background:#ef4444"></div>240A / 360A</span></div></div>
     <div class="section-title">Breaker Thermal Analysis</div>
-    <div class="chart-box"><h3>Sustained Current vs CB285 Trip Band</h3><canvas id="pwTrip"></canvas></div>
+    <div class="chart-box"><h3>Current Excursions vs CB285 Trip Curve (spec sheet axes: Time on X, Current on Y)</h3><canvas id="pwTrip"></canvas>
+      <div class="legend" style="margin-top:8px"><span><div class="dot" style="background:#ef4444"></div>Trip Upper (will trip)</span><span><div class="dot" style="background:#f97316"></div>Trip Lower (may trip)</span><span style="font-size:10px;color:var(--text-muted)">Points in the shaded zone = risk of tripping</span></div></div>
+    <div class="chart-box"><h3>Excursion Detail (every period above 120A)</h3><table class="data-table"><thead><tr><th>#</th><th>Start (s)</th><th>Duration (s)</th><th>Peak (A)</th><th>Avg (A)</th><th>Risk</th></tr></thead><tbody id="pwExcTable"></tbody></table></div>
     <div class="section-title">Battery</div>
     <div class="chart-row">
       <div class="chart-box"><h3>Battery Voltage</h3><canvas id="pwVolt"></canvas></div>
@@ -372,8 +397,38 @@ function renderPower(panel, P, toSec) {
   const cd=dsMax(cT,cV,MAX_PTS);
   mkChart(panel.querySelector('#pwCurrent'),{type:'line',data:{labels:cd.times.map(t=>t.toFixed(1)),datasets:[{data:cd.values,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false},annotation:{annotations:{r:{type:'line',yMin:120,yMax:120,borderColor:'#22c55e',borderWidth:2,borderDash:[6,4],label:{display:true,content:'120A',position:'start',backgroundColor:'rgba(34,197,94,0.8)',font:{size:10}}},l:{type:'line',yMin:162,yMax:162,borderColor:'#f97316',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'162A (135%)',position:'start',backgroundColor:'rgba(249,115,22,0.8)',font:{size:10}}},u2:{type:'line',yMin:240,yMax:240,borderColor:'#ef4444',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'240A (200%)',position:'start',backgroundColor:'rgba(239,68,68,0.8)',font:{size:10}}},u3:{type:'line',yMin:360,yMax:360,borderColor:'#ef4444',borderWidth:1,borderDash:[2,4],label:{display:true,content:'360A (300%)',position:'end',backgroundColor:'rgba(239,68,68,0.6)',font:{size:10}}}}}}}});
 
-  const sp=sustainedPeriods(cT,cV);
-  mkChart(panel.querySelector('#pwTrip'),{type:'scatter',data:{datasets:[{label:'Trip Lower',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.lower})),borderColor:'#f97316',showLine:true,borderWidth:2,pointRadius:3,fill:false},{label:'Trip Upper',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.upper})),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',showLine:true,borderWidth:2,pointRadius:3,fill:'-1'},{label:'Your Robot',data:sp,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.8)',pointRadius:6,pointStyle:'crossRot',showLine:true,borderWidth:2,borderDash:[4,4]}]},options:{scales:{x:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:120},y:{type:'logarithmic',title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0.1,max:1000}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
+  // Excursion-based trip curve (axes: X=time, Y=current — matches CB285 spec sheet)
+  const excursions=findExcursions(cT,cV);
+  const excPeakPts=excursions.map(e=>({x:e.duration,y:e.peakCurrent}));
+  const excAvgPts=excursions.map(e=>({x:e.duration,y:e.avgCurrent}));
+  // Trip curve data: X=time, Y=current (amps)
+  const tripLower=CB285_TRIP.map(p=>({x:p.lower,y:p.pct/100*CB285_RATED}));
+  const tripUpper=CB285_TRIP.map(p=>({x:p.upper,y:p.pct/100*CB285_RATED}));
+  mkChart(panel.querySelector('#pwTrip'),{type:'scatter',data:{datasets:[
+    {label:'Trip Upper (will trip)',data:tripUpper,borderColor:'#ef4444',showLine:true,borderWidth:2,pointRadius:3,fill:false,order:2},
+    {label:'Trip Lower (may trip)',data:tripLower,borderColor:'#f97316',backgroundColor:'rgba(239,68,68,0.08)',showLine:true,borderWidth:2,pointRadius:3,fill:'-1',order:3},
+    {label:'Excursion Peak',data:excPeakPts,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.9)',pointRadius:7,pointStyle:'crossRot',showLine:false,borderWidth:2,order:1},
+    {label:'Excursion Avg',data:excAvgPts,borderColor:'#06b6d4',backgroundColor:'rgba(6,182,212,0.7)',pointRadius:5,pointStyle:'circle',showLine:false,borderWidth:1,order:1},
+  ]},options:{scales:{
+    x:{type:'logarithmic',title:{display:true,text:'Duration (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0.05,max:1000},
+    y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:100}
+  },plugins:{legend:{labels:{color:'#e4e4e7'}},tooltip:{callbacks:{label:ctx=>{const d=ctx.raw;return `${ctx.dataset.label}: ${d.y.toFixed(1)}A for ${d.x.toFixed(2)}s`;}}}}}});
+
+  // Excursion detail table
+  const excTb=panel.querySelector('#pwExcTable');
+  excursions.sort((a,b)=>b.peakCurrent-a.peakCurrent);
+  excursions.forEach((e,i)=>{
+    const tripLo=getTripTime(e.peakCurrent,'lower'),tripHi=getTripTime(e.peakCurrent,'upper');
+    let risk='OK';let riskCls='ok';
+    if(e.duration>=tripHi){risk='TRIPPED';riskCls='danger';}
+    else if(e.duration>=tripLo){risk='IN TRIP BAND';riskCls='warning';}
+    else if(e.peakCurrent>CB285_RATED*1.35){risk='Below band';riskCls='';}
+    const tr=document.createElement('tr');
+    if(riskCls==='danger')tr.classList.add('alert-row-error');
+    else if(riskCls==='warning')tr.classList.add('alert-row-warning');
+    tr.innerHTML=`<td>${i+1}</td><td>${e.startTime.toFixed(2)}</td><td>${e.duration.toFixed(2)}</td><td>${e.peakCurrent.toFixed(1)}</td><td>${e.avgCurrent.toFixed(1)}</td><td><span class="alert-type ${riskCls==='danger'?'error':riskCls}">${risk}</span></td>`;
+    excTb.appendChild(tr);
+  });
 
   if(vd.times.length){const v=dsMax(vd.times,vd.values,MAX_PTS);mkChart(panel.querySelector('#pwVolt'),{type:'line',data:{labels:v.times.map(t=>t.toFixed(1)),datasets:[{data:v.values,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},suggestedMin:6,suggestedMax:14}},plugins:{legend:{display:false}}}});}
   if(bd.times.length){const b=dsMax(bd.times,bd.values,MAX_PTS);mkChart(panel.querySelector('#pwBattCurr'),{type:'line',data:{labels:b.times.map(t=>t.toFixed(1)),datasets:[{data:b.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});}

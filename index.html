@@ -141,6 +141,38 @@ function getTripTime(a,b){const p=(a/CB285_RATED)*100,c=CB285_TRIP;if(p<=c[0].pc
 // ============== HELPERS ==============
 function dsMax(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const a=Math.floor(i*s),b=Math.min(Math.floor((i+1)*s),t.length);let mx=-Infinity,mi=a;for(let j=a;j<b;j++)if(v[j]>mx){mx=v[j];mi=j;}rt.push(t[mi]);rv.push(mx);}return{times:rt,values:rv};}
 function ds(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const idx=Math.floor(i*s);rt.push(t[idx]);rv.push(v[idx]);}return{times:rt,values:rv};}
+
+// Resample a time series onto a uniform time grid using sample-and-hold
+function resampleOnGrid(times, values, grid) {
+  const out = new Array(grid.length);
+  let j = 0;
+  for (let i = 0; i < grid.length; i++) {
+    while (j < times.length - 1 && times[j + 1] <= grid[i]) j++;
+    out[i] = (j < times.length && times[j] <= grid[i]) ? values[j] : null;
+  }
+  return out;
+}
+
+// Build a shared uniform time grid from multiple series, then downsample
+function alignSeries(seriesList, maxPts) {
+  let minT = Infinity, maxT = -Infinity;
+  for (const s of seriesList) {
+    if (!s || !s.times.length) continue;
+    if (s.times[0] < minT) minT = s.times[0];
+    if (s.times[s.times.length - 1] > maxT) maxT = s.times[s.times.length - 1];
+  }
+  if (minT >= maxT) return { grid: [], resampled: seriesList.map(() => []) };
+  // Use the max sample count across series, capped at maxPts
+  const totalSamples = Math.min(Math.max(...seriesList.map(s => s ? s.times.length : 0)), maxPts);
+  const step = (maxT - minT) / (totalSamples - 1);
+  const grid = [];
+  for (let i = 0; i < totalSamples; i++) grid.push(minT + i * step);
+  const resampled = seriesList.map(s => {
+    if (!s || !s.times.length) return new Array(grid.length).fill(null);
+    return resampleOnGrid(s.times, s.values, grid);
+  });
+  return { grid, resampled };
+}
 const COLORS=['#3b82f6','#22c55e','#f97316','#ef4444','#a78bfa','#f472b6','#eab308','#06b6d4','#10b981','#f43f5e'];
 const MAX_PTS=2000; let allCharts=[];
 function destroyAll(){allCharts.forEach(c=>c.destroy());allCharts=[];}
@@ -381,8 +413,8 @@ function renderMechanism(panel, P, toSec, config) {
       <div class="stat-card ${maxErr>5?'danger':maxErr>2?'warning':'ok'}"><div class="label">Max Error</div><div class="value">${maxErr.toFixed(2)} <span class="unit">${config.unit||''}</span></div></div>
       <div class="stat-card"><div class="label">Avg Error</div><div class="value">${avgErr.toFixed(3)} <span class="unit">${config.unit||''}</span></div></div>
     </div>
-    <div class="chart-box"><h3>Setpoint vs Actual ${config.unit?'('+config.unit+')':''}</h3><canvas id="mechMain"></canvas>
-      <div class="legend"><span><div class="dot" style="background:#f97316"></div>Setpoint</span><span><div class="dot" style="background:#3b82f6"></div>Actual</span>${at?'<span><div class="dot" style="background:rgba(34,197,94,0.2)"></div>At Target</span>':''}</div></div>
+    <div class="chart-box"><h3>${config.spLabel||'Setpoint'} vs ${config.curLabel||'Actual'} ${config.unit?'('+config.unit+')':''}</h3><canvas id="mechMain"></canvas>
+      <div class="legend"><span><div class="dot" style="background:#f97316"></div>${config.spLabel||'Setpoint'}</span><span><div class="dot" style="background:#3b82f6"></div>${config.curLabel||'Actual'}</span>${at?'<span><div class="dot" style="background:rgba(34,197,94,0.2)"></div>At Target</span>':''}</div></div>
     ${err?'<div class="chart-box"><h3>Error Over Time</h3><canvas id="mechErr"></canvas></div>':''}
     <div class="chart-row">
       ${motorCur?'<div class="chart-box"><h3>Motor Current (A)</h3><canvas id="mechCurr"></canvas></div>':''}
@@ -392,10 +424,14 @@ function renderMechanism(panel, P, toSec, config) {
     ${state?'<div class="section-title">State Timeline</div><div class="chart-box"><div id="mechStateTimeline"></div></div>':''}
     ${at?'<div class="section-title">At Target Timeline</div><div class="chart-box"><div id="mechAtTargetTimeline"></div></div>':''}`;
 
-  // Main setpoint vs actual chart
+  // Main setpoint vs actual chart — resample both onto shared time grid
   const datasets=[];let labels=[];
-  if(sp&&sp.data.length){const d=ts2(sp.data,toSec),dd=ds(d.times,d.values,MAX_PTS);datasets.push({label:'Setpoint',data:dd.values,borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.1,fill:false,stepped:config.stepped||false});if(dd.times.length>labels.length)labels=dd.times;}
-  if(cur&&cur.data.length){const d=ts2(cur.data,toSec),dd=ds(d.times,d.values,MAX_PTS);datasets.push({label:'Actual',data:dd.values,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});if(dd.times.length>labels.length)labels=dd.times;}
+  const spTS = sp&&sp.data.length ? ts2(sp.data,toSec) : null;
+  const curTS = cur&&cur.data.length ? ts2(cur.data,toSec) : null;
+  const {grid, resampled} = alignSeries([spTS, curTS], MAX_PTS);
+  labels = grid;
+  if(spTS){datasets.push({label:config.spLabel||'Setpoint',data:resampled[0],borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.1,fill:false,stepped:config.stepped||false,spanGaps:true});}
+  if(curTS){datasets.push({label:config.curLabel||'Actual',data:resampled[1],borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false,spanGaps:true});}
 
   let annotations={};
   if(at&&at.data.length){let ss=null,si3=0;for(let i=0;i<at.data.length;i++){const t=toSec(at.data[i].timestamp);if(at.data[i].value&&ss===null)ss=t;else if(!at.data[i].value&&ss!==null){annotations['at'+si3++]={type:'box',xMin:ss.toFixed(1),xMax:t.toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};ss=null;}}if(ss!==null)annotations['at'+si3]={type:'box',xMin:ss.toFixed(1),xMax:toSec(at.data[at.data.length-1].timestamp).toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};}
@@ -694,10 +730,10 @@ const MECHANISMS = [
     {id:'kick', title:'Kicker', setpoint:'/Subsystems/Kicker/KickerSetpoint', current:'/Subsystems/Kicker/KickerVelocity', motorCurrent:'/Subsystems/Kicker/KickerCurrent', velocity:'/Subsystems/Kicker/KickerVelocity', unit:'rad/s', state:'/RealOutputs/States/KickersState'}
   ]},
   {id:'roller', label:'Roller', tabs:[
-    {id:'roll', title:'Roller', setpoint:'/Subsystems/Roller/RollerSetpoint', current:'/Subsystems/Roller/RollerVelocity', motorCurrent:'/Subsystems/Roller/RollerCurrent', velocity:'/Subsystems/Roller/RollerVelocity', voltage:'/Subsystems/Roller/RollerVoltage', unit:'rad/s', state:'/RealOutputs/States/RollerState'}
+    {id:'roll', title:'Roller', setpoint:'/Subsystems/Roller/RollerVoltage', current:'/Subsystems/Roller/RollerVelocity', motorCurrent:'/Subsystems/Roller/RollerCurrent', unit:'V / rad/s', state:'/RealOutputs/States/RollerState', spLabel:'Voltage (V)', curLabel:'Velocity (rad/s)'}
   ]},
   {id:'spindexer', label:'Spindexer', tabs:[
-    {id:'spin', title:'Spindexer', setpoint:'/Subsystems/Spindexer/SpindexerSetpoint', current:'/Subsystems/Spindexer/SpindexerVelocity', motorCurrent:'/Subsystems/Spindexer/SpindexerCurrent', velocity:'/Subsystems/Spindexer/SpindexerVelocity', unit:'rad/s', state:'/RealOutputs/States/SpindexerState'}
+    {id:'spin', title:'Spindexer', setpoint:'/Subsystems/Spindexer/SpindexerAppliedVolts', current:'/Subsystems/Spindexer/SpindexerVelocity', motorCurrent:'/Subsystems/Spindexer/SpindexerCurrent', unit:'V / rad/s', state:'/RealOutputs/States/SpindexerState', spLabel:'Voltage (V)', curLabel:'Velocity (rad/s)'}
   ]},
 ];
 

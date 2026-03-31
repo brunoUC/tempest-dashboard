@@ -93,7 +93,14 @@
 </head>
 <body>
   <header><div><h1>Tempest Log Dashboard</h1><div class="subtitle">AdvantageKit .wpilog analyzer</div></div></header>
-  <div id="upload-section"><div class="upload-zone" id="dropZone"><h2>Drop .wpilog file here</h2><p>or click to browse</p><input type="file" id="fileInput" accept=".wpilog" /></div></div>
+  <div id="upload-section">
+    <div class="upload-zone" id="dropZone">
+      <h2>Drop .wpilog file here</h2>
+      <p>or click to browse &mdash; single file to analyze, or multiple to build history</p>
+      <input type="file" id="fileInput" accept=".wpilog" multiple />
+    </div>
+    <div id="historyPreview" style="max-width:700px;margin:16px auto;display:none"></div>
+  </div>
   <div id="loading" class="loading" style="display:none">Parsing log file...</div>
   <div id="app" style="display:none"><div class="tab-bar" id="tabBar"></div><div id="tabPanels"></div></div>
 <script>
@@ -934,26 +941,313 @@ const MECHANISMS = [
   ]},
 ];
 
+// ============== MATCH PROFILE / HISTORY ==============
+const HISTORY_KEY = 'tempest_match_history';
+
+function extractProfile(P, toSec, filename) {
+  const chE=P.get('/PowerDistribution/ChannelCurrent'), totE=P.get('/PowerDistribution/TotalCurrent');
+  const voltE=P.get('/SystemStats/BatteryVoltage')||P.get('/PowerDistribution/Voltage');
+  let cT=[],cV=[];
+  if(chE&&chE.data.length) for(const r of chE.data){if(Array.isArray(r.value)){cT.push(toSec(r.timestamp));cV.push(r.value.reduce((a,b)=>a+b,0));}}
+  let tT=[],tV=[];
+  if(totE&&totE.data.length) for(const r of totE.data){tT.push(toSec(r.timestamp));tV.push(r.value);}
+  if(tT.length>cT.length){cT=tT;cV=tV;}
+  const vd=voltE?ts2(voltE.data,toSec):{times:[],values:[]};
+
+  const peakCurrent=cV.length?Math.max(...cV):0;
+  const avgCurrent=cV.length?cV.reduce((a,b)=>a+b,0)/cV.length:0;
+  const duration=cT.length?cT[cT.length-1]-cT[0]:0;
+  const minVoltage=vd.values.length?Math.min(...vd.values):0;
+  const avgVoltage=vd.values.length?vd.values.reduce((a,b)=>a+b,0)/vd.values.length:0;
+  let t120=0;for(let i=1;i<cV.length;i++){const dt=cT[i]-cT[i-1];if(dt>0&&dt<1&&cV[i]>120)t120+=dt;}
+
+  // Per-motor stats
+  const motorPaths = [
+    'Drive/Module0/DriveCurrentAmps','Drive/Module1/DriveCurrentAmps','Drive/Module2/DriveCurrentAmps','Drive/Module3/DriveCurrentAmps',
+    'Drive/Module0/TurnCurrentAmps','Drive/Module1/TurnCurrentAmps','Drive/Module2/TurnCurrentAmps','Drive/Module3/TurnCurrentAmps',
+    'Subsystems/Shooter/Turret//Current','Subsystems/Roller/RollerCurrent','Subsystems/Kicker/KickerCurrent',
+    'Subsystems/Extensor/ExtensorCurrent','Subsystems/Spindexer/SpindexerCurrent','Subsystems/Climber/ClimberCurrent',
+  ];
+  const motors = {};
+  for (const mp of motorPaths) {
+    const e = P.get('/'+mp);
+    if (e && e.data.length > 10) {
+      let sum=0,max=0,count=0;
+      for(const r of e.data){const v=Math.abs(r.value);sum+=v;if(v>max)max=v;count++;}
+      motors[mp] = {avg:sum/count, max, count};
+    }
+  }
+
+  return {
+    filename: filename || 'unknown',
+    date: new Date().toISOString(),
+    peakCurrent, avgCurrent, duration, minVoltage, avgVoltage, timeAbove120: t120,
+    motors
+  };
+}
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
+}
+function saveHistory(h) { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+function addToHistory(profile) {
+  const h = loadHistory();
+  // Deduplicate by filename
+  const idx = h.findIndex(p => p.filename === profile.filename);
+  if (idx >= 0) h[idx] = profile; else h.push(profile);
+  saveHistory(h);
+}
+function clearHistory() { localStorage.removeItem(HISTORY_KEY); }
+
+function computeBaseline(history) {
+  if (!history.length) return null;
+  const n = history.length;
+  const avg = (arr) => arr.reduce((a,b)=>a+b,0)/arr.length;
+  const max = (arr) => Math.max(...arr);
+  const min = (arr) => Math.min(...arr);
+
+  const bl = {
+    matchCount: n,
+    peakCurrent: {avg: avg(history.map(h=>h.peakCurrent)), max: max(history.map(h=>h.peakCurrent)), min: min(history.map(h=>h.peakCurrent))},
+    avgCurrent: {avg: avg(history.map(h=>h.avgCurrent)), max: max(history.map(h=>h.avgCurrent)), min: min(history.map(h=>h.avgCurrent))},
+    duration: {avg: avg(history.map(h=>h.duration)), max: max(history.map(h=>h.duration)), min: min(history.map(h=>h.duration))},
+    minVoltage: {avg: avg(history.map(h=>h.minVoltage)), max: max(history.map(h=>h.minVoltage)), min: min(history.map(h=>h.minVoltage))},
+    avgVoltage: {avg: avg(history.map(h=>h.avgVoltage))},
+    timeAbove120: {avg: avg(history.map(h=>h.timeAbove120)), max: max(history.map(h=>h.timeAbove120))},
+    motors: {},
+  };
+
+  // Aggregate motor stats
+  const allMotorKeys = new Set();
+  history.forEach(h => { if(h.motors) Object.keys(h.motors).forEach(k => allMotorKeys.add(k)); });
+  for (const k of allMotorKeys) {
+    const vals = history.filter(h=>h.motors&&h.motors[k]).map(h=>h.motors[k]);
+    if (vals.length) {
+      bl.motors[k] = {
+        avg: avg(vals.map(v=>v.avg)),
+        max: max(vals.map(v=>v.max)),
+        avgMax: avg(vals.map(v=>v.max)),
+        samples: vals.length,
+      };
+    }
+  }
+  return bl;
+}
+
+function showHistoryPreview() {
+  const el = document.getElementById('historyPreview');
+  const h = loadHistory();
+  if (!h.length) { el.style.display='none'; return; }
+  el.style.display='block';
+  const bl = computeBaseline(h);
+  el.innerHTML = `
+    <div class="chart-box" style="margin:0">
+      <h3 style="margin-bottom:8px">Stored Profile: ${h.length} match${h.length>1?'es':''}</h3>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
+        Avg peak: ${bl.peakCurrent.avg.toFixed(1)}A &bull;
+        Avg current: ${bl.avgCurrent.avg.toFixed(1)}A &bull;
+        Avg min voltage: ${bl.minVoltage.avg.toFixed(2)}V &bull;
+        Avg duration: ${bl.duration.avg.toFixed(0)}s
+      </div>
+      <div style="font-size:11px;color:var(--text-muted)">
+        Matches: ${h.map(p=>p.filename.replace('.wpilog','')).join(', ')}
+      </div>
+      <div style="margin-top:8px">
+        <button class="reset-zoom-btn" onclick="clearHistory();showHistoryPreview();">Clear History</button>
+      </div>
+    </div>`;
+}
+
+function renderHistory(panel, currentProfile) {
+  const history = loadHistory();
+  const bl = computeBaseline(history.filter(h=>h.filename!==currentProfile?.filename));
+  const allBl = computeBaseline(history);
+
+  if (!history.length) {
+    panel.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)"><h3>No history yet</h3><p>Upload multiple logs or analyze matches to build a profile. Stats are saved automatically.</p></div>';
+    return;
+  }
+
+  // Comparison helper
+  function cmp(val, ref, unit, lowerBetter) {
+    if (!ref || !isFinite(ref.avg)) return `<span>${val.toFixed(2)}${unit}</span>`;
+    const diff = val - ref.avg;
+    const pct = ref.avg !== 0 ? (diff/ref.avg*100) : 0;
+    const color = (lowerBetter ? diff > 0 : diff < 0) ? 'var(--red)' : (Math.abs(pct)<10?'var(--text)':'var(--green)');
+    const arrow = diff>0?'&#9650;':'&#9660;';
+    return `<span>${val.toFixed(2)}${unit}</span> <span style="font-size:10px;color:${color}">${arrow} ${Math.abs(pct).toFixed(0)}%</span>`;
+  }
+
+  // Current match comparison
+  let compHTML = '';
+  if (currentProfile && bl && bl.matchCount > 0) {
+    compHTML = `
+      <div class="section-title">Current Match vs Historical Baseline (${bl.matchCount} matches)</div>
+      <div class="chart-box">
+        <table class="data-table">
+          <thead><tr><th>Metric</th><th>This Match</th><th>Baseline Avg</th><th>Baseline Range</th><th>Delta</th></tr></thead>
+          <tbody>
+            <tr><td>Peak Current</td><td>${currentProfile.peakCurrent.toFixed(1)}A</td><td>${bl.peakCurrent.avg.toFixed(1)}A</td><td>${bl.peakCurrent.min.toFixed(1)} - ${bl.peakCurrent.max.toFixed(1)}A</td><td>${cmp(currentProfile.peakCurrent, bl.peakCurrent, 'A', true)}</td></tr>
+            <tr><td>Avg Current</td><td>${currentProfile.avgCurrent.toFixed(1)}A</td><td>${bl.avgCurrent.avg.toFixed(1)}A</td><td>${bl.avgCurrent.min.toFixed(1)} - ${bl.avgCurrent.max.toFixed(1)}A</td><td>${cmp(currentProfile.avgCurrent, bl.avgCurrent, 'A', true)}</td></tr>
+            <tr><td>Min Voltage</td><td>${currentProfile.minVoltage.toFixed(2)}V</td><td>${bl.minVoltage.avg.toFixed(2)}V</td><td>${bl.minVoltage.min.toFixed(2)} - ${bl.minVoltage.max.toFixed(2)}V</td><td>${cmp(currentProfile.minVoltage, bl.minVoltage, 'V', false)}</td></tr>
+            <tr><td>Time &gt;120A</td><td>${currentProfile.timeAbove120.toFixed(1)}s</td><td>${bl.timeAbove120.avg.toFixed(1)}s</td><td>0 - ${bl.timeAbove120.max.toFixed(1)}s</td><td>${cmp(currentProfile.timeAbove120, bl.timeAbove120, 's', true)}</td></tr>
+            <tr><td>Duration</td><td>${currentProfile.duration.toFixed(0)}s</td><td>${bl.duration.avg.toFixed(0)}s</td><td>${bl.duration.min.toFixed(0)} - ${bl.duration.max.toFixed(0)}s</td><td>${cmp(currentProfile.duration, bl.duration, 's', false)}</td></tr>
+          </tbody>
+        </table>
+      </div>`;
+
+    // Per-motor comparison
+    if (currentProfile.motors && Object.keys(bl.motors).length) {
+      compHTML += `<div class="section-title">Per-Motor Current: This Match vs Baseline</div><div class="chart-box"><table class="data-table">
+        <thead><tr><th>Motor</th><th>This Avg</th><th>Baseline Avg</th><th>This Peak</th><th>Baseline Peak Avg</th><th>Delta Avg</th></tr></thead><tbody>`;
+      for (const [k,v] of Object.entries(currentProfile.motors)) {
+        const b = bl.motors[k];
+        const label = k.replace('Drive/','').replace('Subsystems/','').replace('//','/');
+        compHTML += `<tr><td>${label}</td><td>${v.avg.toFixed(2)}A</td><td>${b?b.avg.toFixed(2):'—'}A</td><td>${v.max.toFixed(1)}A</td><td>${b?b.avgMax.toFixed(1):'—'}A</td><td>${b?cmp(v.avg,b,'A',true):'—'}</td></tr>`;
+      }
+      compHTML += '</tbody></table></div>';
+    }
+  }
+
+  // All matches table
+  let matchesHTML = `<div class="section-title">All Stored Matches (${history.length})</div>
+    <div class="chart-box"><table class="data-table">
+      <thead><tr><th>File</th><th>Date</th><th>Duration</th><th>Peak I</th><th>Avg I</th><th>Min V</th><th>Time &gt;120A</th><th></th></tr></thead><tbody>`;
+  for (const m of history) {
+    const isCurrent = currentProfile && m.filename === currentProfile.filename;
+    matchesHTML += `<tr style="${isCurrent?'background:rgba(59,130,246,0.1)':''}">
+      <td>${m.filename.replace('.wpilog','')}</td>
+      <td>${m.date?new Date(m.date).toLocaleDateString():'-'}</td>
+      <td>${m.duration.toFixed(0)}s</td>
+      <td>${m.peakCurrent.toFixed(1)}A</td>
+      <td>${m.avgCurrent.toFixed(1)}A</td>
+      <td>${m.minVoltage.toFixed(2)}V</td>
+      <td>${m.timeAbove120.toFixed(1)}s</td>
+      <td>${isCurrent?'<span style="color:var(--accent);font-size:10px">CURRENT</span>':''}</td></tr>`;
+  }
+  matchesHTML += '</tbody></table></div>';
+
+  // Aggregate baseline
+  let blHTML = '';
+  if (allBl) {
+    blHTML = `<div class="section-title">Aggregate Profile (all ${allBl.matchCount} matches)</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="label">Avg Peak Current</div><div class="value">${allBl.peakCurrent.avg.toFixed(1)} <span class="unit">A</span></div></div>
+      <div class="stat-card"><div class="label">Max Peak Current</div><div class="value">${allBl.peakCurrent.max.toFixed(1)} <span class="unit">A</span></div></div>
+      <div class="stat-card"><div class="label">Avg Current</div><div class="value">${allBl.avgCurrent.avg.toFixed(1)} <span class="unit">A</span></div></div>
+      <div class="stat-card"><div class="label">Avg Min Voltage</div><div class="value">${allBl.minVoltage.avg.toFixed(2)} <span class="unit">V</span></div></div>
+      <div class="stat-card"><div class="label">Worst Min Voltage</div><div class="value">${allBl.minVoltage.min.toFixed(2)} <span class="unit">V</span></div></div>
+      <div class="stat-card"><div class="label">Avg Time &gt;120A</div><div class="value">${allBl.timeAbove120.avg.toFixed(1)} <span class="unit">s</span></div></div>
+    </div>`;
+
+    // Motor baseline chart
+    if (Object.keys(allBl.motors).length) {
+      blHTML += `<div class="section-title">Motor Baseline Averages</div><div class="chart-box"><canvas id="histMotorChart"></canvas></div>`;
+    }
+  }
+
+  // Trend chart (peak current across matches)
+  let trendHTML = '';
+  if (history.length >= 2) {
+    trendHTML = `<div class="section-title">Trends Across Matches</div>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Peak Current per Match</h3><canvas id="histTrendPeak"></canvas></div>
+        <div class="chart-box"><h3>Min Voltage per Match</h3><canvas id="histTrendVolt"></canvas></div>
+      </div>`;
+  }
+
+  panel.innerHTML = compHTML + matchesHTML + blHTML + trendHTML +
+    `<div style="margin-top:16px"><button class="reset-zoom-btn" onclick="clearHistory();location.reload();">Clear All History</button></div>`;
+
+  // Render charts
+  if (allBl && Object.keys(allBl.motors).length) {
+    const labels = Object.keys(allBl.motors).map(k=>k.replace('Drive/','').replace('Subsystems/','').replace('//','/'));
+    const avgs = Object.values(allBl.motors).map(m=>m.avg);
+    const maxes = Object.values(allBl.motors).map(m=>m.avgMax);
+    const curAvgs = currentProfile ? Object.keys(allBl.motors).map(k=>currentProfile.motors[k]?.avg||0) : null;
+
+    const ds2 = [{label:'Baseline Avg',data:avgs,backgroundColor:'rgba(59,130,246,0.6)',borderRadius:4},
+                 {label:'Baseline Avg Peak',data:maxes,backgroundColor:'rgba(239,68,68,0.4)',borderRadius:4}];
+    if (curAvgs) ds2.push({label:'This Match Avg',data:curAvgs,backgroundColor:'rgba(34,197,94,0.6)',borderRadius:4});
+
+    mkChart(panel.querySelector('#histMotorChart'),{type:'bar',data:{labels,datasets:ds2},options:{
+      indexAxis:'y',
+      scales:{x:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'Current (A)',color:'#9ca3af'}},y:{ticks:{color:'#9ca3af',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}}},
+      plugins:{legend:{labels:{color:'#e4e4e7'}}}
+    }});
+  }
+
+  if (history.length >= 2) {
+    const labels = history.map(h=>h.filename.replace('.wpilog','').replace(/^akit_/,''));
+    mkChart(panel.querySelector('#histTrendPeak'),{type:'line',data:{labels,datasets:[{data:history.map(h=>h.peakCurrent),borderColor:'#ef4444',borderWidth:2,pointRadius:4,tension:0.2,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxRotation:45},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'Peak Current (A)',color:'#9ca3af'}}},plugins:{legend:{display:false}}}});
+    mkChart(panel.querySelector('#histTrendVolt'),{type:'line',data:{labels,datasets:[{data:history.map(h=>h.minVoltage),borderColor:'#a78bfa',borderWidth:2,pointRadius:4,tension:0.2,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxRotation:45},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'Min Voltage (V)',color:'#9ca3af'}}},plugins:{legend:{display:false}}}});
+  }
+}
+
 // ============== FILE HANDLING ==============
 const dropZone=document.getElementById('dropZone'),fileInput=document.getElementById('fileInput');
 const uploadSection=document.getElementById('upload-section'),loadingDiv=document.getElementById('loading'),app=document.getElementById('app');
 dropZone.addEventListener('click',()=>fileInput.click());
 dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
 dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
-dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0]);});
-fileInput.addEventListener('change',()=>{if(fileInput.files.length)loadFile(fileInput.files[0]);});
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');
+  const files=Array.from(e.dataTransfer.files).filter(f=>f.name.endsWith('.wpilog'));
+  if(files.length===1)loadFile(files[0]);else if(files.length>1)loadFilesForHistory(files);
+});
+fileInput.addEventListener('change',()=>{
+  const files=Array.from(fileInput.files).filter(f=>f.name.endsWith('.wpilog'));
+  if(files.length===1)loadFile(files[0]);else if(files.length>1)loadFilesForHistory(files);
+});
+
+// Show history preview on page load
+showHistoryPreview();
 
 function loadFile(file){
   uploadSection.style.display='none';loadingDiv.style.display='block';app.style.display='none';
   const reader=new FileReader();
-  reader.onload=e=>{try{const P=new WPILOGParser(e.target.result);P.parse();loadingDiv.style.display='none';app.style.display='block';buildDashboard(P);}catch(err){loadingDiv.textContent='Error: '+err.message;console.error(err);}};
+  reader.onload=e=>{try{const P=new WPILOGParser(e.target.result);P.parse();loadingDiv.style.display='none';app.style.display='block';buildDashboard(P,file.name);}catch(err){loadingDiv.textContent='Error: '+err.message;console.error(err);}};
   reader.readAsArrayBuffer(file);
 }
 
-function buildDashboard(P){
+function loadFilesForHistory(files){
+  uploadSection.style.display='none';loadingDiv.style.display='block';app.style.display='none';
+  let processed=0;const total=files.length;
+  loadingDiv.textContent=`Processing log 1 of ${total}...`;
+  let lastP=null, lastFn='';
+  function processNext(i){
+    if(i>=total){
+      loadingDiv.style.display='none';
+      if(lastP){app.style.display='block';buildDashboard(lastP,lastFn);}
+      else{uploadSection.style.display='block';showHistoryPreview();}
+      return;
+    }
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const P=new WPILOGParser(e.target.result);P.parse();
+        let minTs=Infinity;for(const[,recs]of P.records)if(recs.length&&recs[0].timestamp<minTs)minTs=recs[0].timestamp;
+        const toSec=ts=>(ts-minTs)/1e6;
+        const profile=extractProfile(P,toSec,files[i].name);
+        addToHistory(profile);
+        lastP=P;lastFn=files[i].name;
+      }catch(err){console.warn('Skipping '+files[i].name+': '+err.message);}
+      processed++;
+      loadingDiv.textContent=`Processing log ${Math.min(processed+1,total)} of ${total}...`;
+      processNext(i+1);
+    };
+    reader.readAsArrayBuffer(files[i]);
+  }
+  processNext(0);
+}
+
+function buildDashboard(P,fileName){
   destroyAll();TABS.length=0;
   let minTs=Infinity;for(const[,recs]of P.records)if(recs.length&&recs[0].timestamp<minTs)minTs=recs[0].timestamp;
   const toSec=ts=>(ts-minTs)/1e6;
+
+  // Extract profile and add to history
+  const currentProfile=extractProfile(P,toSec,fileName||'unknown');
+  addToHistory(currentProfile);
 
   addTab('power','Power',panel=>renderPower(panel,P,toSec));
   addTab('pose','Pose Estimation',panel=>renderPose(panel,P,toSec));
@@ -988,6 +1282,7 @@ function buildDashboard(P){
   }
 
   addTab('alerts','Alerts / Console',panel=>renderAlerts(panel,P,toSec));
+  addTab('history','History',panel=>renderHistory(panel,currentProfile));
 
   initTabs();
   TABS[0].renderFn(document.getElementById('tab-'+TABS[0].id));

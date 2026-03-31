@@ -8,93 +8,46 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
   <style>
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --surface2: #242736;
-      --border: #2e3247;
-      --text: #e4e4e7;
-      --text-muted: #9ca3af;
-      --accent: #3b82f6;
-      --red: #ef4444;
-      --orange: #f97316;
-      --yellow: #eab308;
-      --green: #22c55e;
-      --cyan: #06b6d4;
-      --purple: #a78bfa;
-      --pink: #f472b6;
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #242736; --border: #2e3247;
+      --text: #e4e4e7; --text-muted: #9ca3af; --accent: #3b82f6;
+      --red: #ef4444; --orange: #f97316; --yellow: #eab308; --green: #22c55e;
+      --cyan: #06b6d4; --purple: #a78bfa; --pink: #f472b6;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
-      background: var(--bg); color: var(--text); min-height: 100vh;
-    }
-    header {
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      padding: 12px 24px; display: flex; align-items: center; gap: 16px;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
     header h1 { font-size: 18px; font-weight: 600; }
     header .subtitle { color: var(--text-muted); font-size: 12px; }
-    .upload-zone {
-      max-width: 600px; margin: 80px auto; border: 2px dashed var(--border);
-      border-radius: 12px; padding: 60px 40px; text-align: center; cursor: pointer;
-      transition: border-color 0.2s;
-    }
+    .upload-zone { max-width: 600px; margin: 80px auto; border: 2px dashed var(--border); border-radius: 12px; padding: 60px 40px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
     .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); }
     .upload-zone h2 { margin-bottom: 8px; font-size: 18px; }
     .upload-zone p { color: var(--text-muted); font-size: 14px; }
     .upload-zone input { display: none; }
     .loading { text-align: center; padding: 80px; color: var(--text-muted); font-size: 16px; }
-
-    /* Tabs */
-    .tab-bar {
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      display: flex; gap: 0; overflow-x: auto; padding: 0 16px;
-    }
-    .tab-btn {
-      padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--text-muted);
-      background: none; border: none; border-bottom: 2px solid transparent;
-      cursor: pointer; white-space: nowrap; transition: all 0.15s;
-    }
+    .tab-bar { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 0; overflow-x: auto; padding: 0 16px; }
+    .tab-btn { padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--text-muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
     .tab-btn:hover { color: var(--text); background: var(--surface2); }
     .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
     .tab-content { display: none; padding: 24px; }
     .tab-content.active { display: block; }
-
-    /* Cards & Charts */
-    .stats-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px; margin-bottom: 20px;
-    }
-    .stat-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; padding: 14px 16px;
-    }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
     .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
     .stat-card .value { font-size: 24px; font-weight: 700; }
     .stat-card .unit { font-size: 13px; color: var(--text-muted); font-weight: 400; }
     .stat-card.danger .value { color: var(--red); }
     .stat-card.warning .value { color: var(--orange); }
     .stat-card.ok .value { color: var(--green); }
-    .chart-box {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; padding: 16px; margin-bottom: 16px;
-    }
+    .chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
     .chart-box h3 { font-size: 13px; margin-bottom: 10px; color: var(--text-muted); }
     .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
-    .section-title {
-      font-size: 15px; font-weight: 600; margin: 20px 0 10px;
-      padding-bottom: 6px; border-bottom: 1px solid var(--border);
-    }
-    .banner {
-      border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px;
-    }
+    .section-title { font-size: 15px; font-weight: 600; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .banner { border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; }
     .banner.danger { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
     .banner.danger strong { color: var(--red); }
     .banner.ok { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); }
     .banner.ok strong { color: var(--green); }
-
-    /* Table */
     .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .data-table th, .data-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
     .data-table th { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -102,292 +55,201 @@
     .bar { height: 5px; border-radius: 3px; background: var(--accent); min-width: 2px; }
     .bar.hot { background: var(--orange); }
     .bar.danger { background: var(--red); }
-
-    /* Pose timeline */
-    .camera-timeline {
-      display: flex; flex-direction: column; gap: 6px; margin: 12px 0;
-    }
-    .cam-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-    .cam-label { width: 160px; text-align: right; color: var(--text-muted); flex-shrink: 0; }
-    .cam-track {
-      flex: 1; height: 18px; background: var(--surface2); border-radius: 3px;
-      position: relative; overflow: hidden;
-    }
-    .cam-seg {
-      position: absolute; height: 100%; border-radius: 2px; opacity: 0.85;
-    }
-
-    /* Mechanism error band */
-    .mech-summary { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
-    .mech-stat {
-      background: var(--surface2); border-radius: 6px; padding: 8px 14px;
-      font-size: 12px;
-    }
-    .mech-stat .mv { font-size: 18px; font-weight: 700; }
-
     .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
     .legend span { display: flex; align-items: center; gap: 4px; }
     .legend .dot { width: 10px; height: 3px; border-radius: 2px; }
+
+    /* Discrete / Gantt timeline */
+    .discrete-timeline { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+    .disc-row { display: flex; align-items: center; gap: 8px; font-size: 12px; height: 22px; }
+    .disc-label { width: 180px; text-align: right; color: var(--text-muted); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .disc-track { flex: 1; height: 18px; background: var(--surface2); border-radius: 3px; position: relative; overflow: hidden; }
+    .disc-seg { position: absolute; height: 100%; border-radius: 2px; opacity: 0.9; display: flex; align-items: center; padding: 0 4px; font-size: 9px; color: #fff; overflow: hidden; white-space: nowrap; }
+    .disc-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-top: 4px; padding-left: 188px; }
+
+    /* Alert table */
+    .alert-row-error { border-left: 3px solid var(--red) !important; }
+    .alert-row-warning { border-left: 3px solid var(--orange) !important; }
+    .alert-row-info { border-left: 3px solid var(--accent) !important; }
+    .alert-type { font-weight: 600; font-size: 11px; padding: 2px 6px; border-radius: 4px; }
+    .alert-type.error { background: rgba(239,68,68,0.15); color: var(--red); }
+    .alert-type.warning { background: rgba(249,115,22,0.15); color: var(--orange); }
+    .alert-type.info { background: rgba(59,130,246,0.15); color: var(--accent); }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Tempest Log Dashboard</h1>
-      <div class="subtitle">AdvantageKit .wpilog analyzer</div>
-    </div>
-  </header>
-
-  <div id="upload-section">
-    <div class="upload-zone" id="dropZone">
-      <h2>Drop .wpilog file here</h2>
-      <p>or click to browse</p>
-      <input type="file" id="fileInput" accept=".wpilog" />
-    </div>
-  </div>
+  <header><div><h1>Tempest Log Dashboard</h1><div class="subtitle">AdvantageKit .wpilog analyzer</div></div></header>
+  <div id="upload-section"><div class="upload-zone" id="dropZone"><h2>Drop .wpilog file here</h2><p>or click to browse</p><input type="file" id="fileInput" accept=".wpilog" /></div></div>
   <div id="loading" class="loading" style="display:none">Parsing log file...</div>
-
-  <div id="app" style="display:none">
-    <div class="tab-bar" id="tabBar"></div>
-    <div id="tabPanels"></div>
-  </div>
-
+  <div id="app" style="display:none"><div class="tab-bar" id="tabBar"></div><div id="tabPanels"></div></div>
 <script>
-// ===================== WPILOG PARSER =====================
+// ============== WPILOG PARSER ==============
 class WPILOGParser {
   constructor(buffer) {
-    this.data = new DataView(buffer);
-    this.bytes = new Uint8Array(buffer);
-    this.pos = 0;
-    this.entries = new Map();
-    this.records = new Map();
+    this.data = new DataView(buffer); this.bytes = new Uint8Array(buffer); this.pos = 0;
+    this.entries = new Map(); this.records = new Map();
   }
   parse() {
-    const magic = String.fromCharCode(...this.bytes.slice(0, 6));
-    if (magic !== 'WPILOG') throw new Error('Not a valid .wpilog file');
+    if (String.fromCharCode(...this.bytes.slice(0,6)) !== 'WPILOG') throw new Error('Not a valid .wpilog file');
     this.pos = 8;
-    const extraLen = this.data.getUint32(this.pos, true);
-    this.pos += 4 + extraLen;
-    while (this.pos < this.bytes.length) {
-      try { this._readRecord(); } catch { break; }
-    }
+    const extraLen = this.data.getUint32(this.pos, true); this.pos += 4 + extraLen;
+    while (this.pos < this.bytes.length) { try { this._readRecord(); } catch { break; } }
   }
   _readRecord() {
     const bf = this.bytes[this.pos++];
-    const idLen = (bf & 0x03) + 1, sizeLen = ((bf >> 2) & 0x03) + 1, tsLen = ((bf >> 4) & 0x07) + 1;
-    const entryId = this._readUint(idLen);
-    const payloadSize = this._readUint(sizeLen);
-    const timestamp = this._readUint(tsLen);
-    const ps = this.pos;
-    this.pos += payloadSize;
-    if (entryId === 0) this._ctrl(ps, payloadSize);
-    else this._dataRec(entryId, ps, payloadSize, timestamp);
+    const idLen=(bf&0x03)+1, sizeLen=((bf>>2)&0x03)+1, tsLen=((bf>>4)&0x07)+1;
+    const entryId=this._readUint(idLen), payloadSize=this._readUint(sizeLen), timestamp=this._readUint(tsLen);
+    const ps=this.pos; this.pos+=payloadSize;
+    if(entryId===0) this._ctrl(ps); else this._dataRec(entryId,ps,payloadSize,timestamp);
   }
-  _readUint(len) {
-    let v = 0;
-    for (let i = 0; i < len; i++) v |= this.bytes[this.pos++] << (i * 8);
-    return v >>> 0;
+  _readUint(len) { let v=0; for(let i=0;i<len;i++) v|=this.bytes[this.pos++]<<(i*8); return v>>>0; }
+  _ctrl(o) {
+    if(this.bytes[o]!==0) return;
+    const dv=this.data, eid=dv.getUint32(o+1,true), nL=dv.getUint32(o+5,true);
+    const name=new TextDecoder().decode(this.bytes.slice(o+9,o+9+nL));
+    const tL=dv.getUint32(o+9+nL,true);
+    const type=new TextDecoder().decode(this.bytes.slice(o+13+nL,o+13+nL+tL));
+    this.entries.set(eid,{name,type}); if(!this.records.has(eid)) this.records.set(eid,[]);
   }
-  _ctrl(o, s) {
-    if (this.bytes[o] !== 0) return;
-    const dv = this.data;
-    const eid = dv.getUint32(o+1, true);
-    const nL = dv.getUint32(o+5, true);
-    const name = new TextDecoder().decode(this.bytes.slice(o+9, o+9+nL));
-    const tL = dv.getUint32(o+9+nL, true);
-    const type = new TextDecoder().decode(this.bytes.slice(o+13+nL, o+13+nL+tL));
-    this.entries.set(eid, { name, type });
-    if (!this.records.has(eid)) this.records.set(eid, []);
+  _dataRec(id,o,s,ts) {
+    const e=this.entries.get(id); if(!e) return; let v;
+    try { switch(e.type) {
+      case 'double': v=this.data.getFloat64(o,true); break;
+      case 'float': v=this.data.getFloat32(o,true); break;
+      case 'int64': v=Number(this.data.getBigInt64(o,true)); break;
+      case 'boolean': v=this.bytes[o]!==0; break;
+      case 'string': case 'json': v=new TextDecoder().decode(this.bytes.slice(o,o+s)); break;
+      case 'double[]': v=[]; for(let i=0;i<s/8;i++) v.push(this.data.getFloat64(o+i*8,true)); break;
+      case 'float[]': v=[]; for(let i=0;i<s/4;i++) v.push(this.data.getFloat32(o+i*4,true)); break;
+      case 'string[]': {
+        v=[]; if(s>=4){ let cnt=this.data.getUint32(o,true),off=o+4;
+        for(let i=0;i<cnt&&off+4<=o+s;i++){const sL=this.data.getUint32(off,true);off+=4;v.push(new TextDecoder().decode(this.bytes.slice(off,off+sL)));off+=sL;}}
+        break; }
+      default: return;
+    }} catch { return; }
+    this.records.get(id)?.push({timestamp:ts,value:v});
   }
-  _dataRec(id, o, s, ts) {
-    const e = this.entries.get(id);
-    if (!e) return;
-    let v;
-    try {
-      switch (e.type) {
-        case 'double': v = this.data.getFloat64(o, true); break;
-        case 'float': v = this.data.getFloat32(o, true); break;
-        case 'int64': v = Number(this.data.getBigInt64(o, true)); break;
-        case 'boolean': v = this.bytes[o] !== 0; break;
-        case 'string': case 'json': v = new TextDecoder().decode(this.bytes.slice(o, o+s)); break;
-        case 'double[]': { v=[]; for(let i=0;i<s/8;i++) v.push(this.data.getFloat64(o+i*8,true)); break; }
-        case 'float[]': { v=[]; for(let i=0;i<s/4;i++) v.push(this.data.getFloat32(o+i*4,true)); break; }
-        default: return;
-      }
-    } catch { return; }
-    this.records.get(id)?.push({ timestamp: ts, value: v });
-  }
-  get(name) {
-    for (const [id, e] of this.entries) {
-      if (e.name === name) return { id, ...e, data: this.records.get(id) || [] };
+  get(name) { for(const[id,e]of this.entries) if(e.name===name) return{id,...e,data:this.records.get(id)||[]}; return null; }
+  match(re) { const r=[]; for(const[id,e]of this.entries) if(re.test(e.name)) r.push({id,...e,data:this.records.get(id)||[]}); return r; }
+}
+
+// ============== CB285 BREAKER ==============
+const CB285_RATED=120;
+const CB285_TRIP=[{pct:135,lower:200,upper:600},{pct:150,lower:100,upper:500},{pct:175,lower:40,upper:200},{pct:200,lower:20,upper:80},{pct:250,lower:8,upper:40},{pct:300,lower:5,upper:20},{pct:400,lower:2,upper:8},{pct:500,lower:1,upper:4},{pct:600,lower:0.5,upper:2}];
+function getTripTime(a,b){const p=(a/CB285_RATED)*100,c=CB285_TRIP;if(p<=c[0].pct)return Infinity;if(p>=c[c.length-1].pct)return c[c.length-1][b];for(let i=0;i<c.length-1;i++){if(p>=c[i].pct&&p<=c[i+1].pct){const t=(p-c[i].pct)/(c[i+1].pct-c[i].pct);return Math.exp(Math.log(c[i][b])+t*(Math.log(c[i+1][b])-Math.log(c[i][b])));}}return c[c.length-1][b];}
+
+// ============== HELPERS ==============
+function dsMax(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const a=Math.floor(i*s),b=Math.min(Math.floor((i+1)*s),t.length);let mx=-Infinity,mi=a;for(let j=a;j<b;j++)if(v[j]>mx){mx=v[j];mi=j;}rt.push(t[mi]);rv.push(mx);}return{times:rt,values:rv};}
+function ds(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const idx=Math.floor(i*s);rt.push(t[idx]);rv.push(v[idx]);}return{times:rt,values:rv};}
+const COLORS=['#3b82f6','#22c55e','#f97316','#ef4444','#a78bfa','#f472b6','#eab308','#06b6d4','#10b981','#f43f5e'];
+const MAX_PTS=2000; let allCharts=[];
+function destroyAll(){allCharts.forEach(c=>c.destroy());allCharts=[];}
+function mkChart(el,cfg){if(!el)return null;cfg.options=cfg.options||{};cfg.options.animation=false;cfg.options.responsive=true;const c=new Chart(el,cfg);allCharts.push(c);return c;}
+function ts2(data,toSec){const t=[],v=[];for(const r of data){t.push(toSec(r.timestamp));v.push(r.value);}return{times:t,values:v};}
+function sustainedPeriods(t,v){const th=[130,150,180,210,240,300,360,480,600],pts=[];for(const h of th){let mx=0,s=null;for(let i=0;i<v.length;i++){if(v[i]>=h){if(s===null)s=t[i];}else{if(s!==null){mx=Math.max(mx,t[i]-s);s=null;}}}if(s!==null)mx=Math.max(mx,t[t.length-1]-s);if(mx>0.01)pts.push({x:h,y:mx});}return pts;}
+
+// State color palette for discrete charts
+const STATE_COLORS = {
+  '': '#555', 'NULL': '#555', 'IDLE': '#555', 'NO_TARGET': '#666',
+  // Generic positive states
+  'Tracking Hub': '#22c55e', 'Running State': '#3b82f6', 'Running Low Velocity': '#06b6d4',
+  'Extended State': '#22c55e', 'Shake State': '#f97316', 'Stop State': '#ef4444', 'Stopped State': '#ef4444',
+  'Drive Align Joystick State': '#a78bfa',
+};
+function stateColor(s) { return STATE_COLORS[s] || COLORS[Math.abs(hashStr(s)) % COLORS.length]; }
+function hashStr(s) { let h=0; for(let i=0;i<s.length;i++) h=((h<<5)-h)+s.charCodeAt(i); return h; }
+
+// Build discrete timeline segments from string entry data
+function buildSegments(entry, toSec) {
+  if (!entry || !entry.data.length) return [];
+  const segs = [];
+  let curVal = entry.data[0].value, curStart = toSec(entry.data[0].timestamp);
+  for (let i = 1; i < entry.data.length; i++) {
+    const t = toSec(entry.data[i].timestamp), v = entry.data[i].value;
+    if (v !== curVal) {
+      segs.push({ start: curStart, end: t, value: curVal });
+      curVal = v; curStart = t;
     }
-    return null;
   }
-  match(re) {
-    const r = [];
-    for (const [id, e] of this.entries) if (re.test(e.name)) r.push({ id, ...e, data: this.records.get(id)||[] });
-    return r;
-  }
+  segs.push({ start: curStart, end: toSec(entry.data[entry.data.length-1].timestamp), value: curVal });
+  return segs;
 }
 
-// ===================== CB285 BREAKER =====================
-const CB285_RATED = 120;
-const CB285_TRIP = [
-  {pct:135,lower:200,upper:600},{pct:150,lower:100,upper:500},{pct:175,lower:40,upper:200},
-  {pct:200,lower:20,upper:80},{pct:250,lower:8,upper:40},{pct:300,lower:5,upper:20},
-  {pct:400,lower:2,upper:8},{pct:500,lower:1,upper:4},{pct:600,lower:0.5,upper:2},
-];
-function getTripTime(amps, bound) {
-  const pct = (amps/CB285_RATED)*100, c=CB285_TRIP;
-  if(pct<=c[0].pct) return Infinity;
-  if(pct>=c[c.length-1].pct) return c[c.length-1][bound];
-  for(let i=0;i<c.length-1;i++){
-    if(pct>=c[i].pct&&pct<=c[i+1].pct){
-      const t=(pct-c[i].pct)/(c[i+1].pct-c[i].pct);
-      return Math.exp(Math.log(c[i][bound])+t*(Math.log(c[i+1][bound])-Math.log(c[i][bound])));
+// Build boolean discrete segments
+function buildBoolSegments(entry, toSec) {
+  if (!entry || !entry.data.length) return [];
+  const segs = [];
+  let curVal = entry.data[0].value, curStart = toSec(entry.data[0].timestamp);
+  for (let i = 1; i < entry.data.length; i++) {
+    const t = toSec(entry.data[i].timestamp), v = entry.data[i].value;
+    if (v !== curVal) {
+      segs.push({ start: curStart, end: t, value: curVal });
+      curVal = v; curStart = t;
     }
   }
-  return c[c.length-1][bound];
+  segs.push({ start: curStart, end: toSec(entry.data[entry.data.length-1].timestamp), value: curVal });
+  return segs;
 }
 
-// ===================== HELPERS =====================
-function dsMax(times, vals, n) {
-  if(times.length<=n) return {times,values:vals};
-  const step=times.length/n, rt=[], rv=[];
-  for(let i=0;i<n;i++){
-    const s=Math.floor(i*step),e=Math.min(Math.floor((i+1)*step),times.length);
-    let mx=-Infinity,mi=s;
-    for(let j=s;j<e;j++) if(vals[j]>mx){mx=vals[j];mi=j;}
-    rt.push(times[mi]); rv.push(mx);
-  }
-  return {times:rt,values:rv};
-}
-function ds(times,vals,n){
-  if(times.length<=n) return {times,values:vals};
-  const step=times.length/n,rt=[],rv=[];
-  for(let i=0;i<n;i++){const idx=Math.floor(i*step);rt.push(times[idx]);rv.push(vals[idx]);}
-  return {times:rt,values:rv};
-}
-
-const COLORS = ['#3b82f6','#22c55e','#f97316','#ef4444','#a78bfa','#f472b6','#eab308','#06b6d4','#10b981','#f43f5e'];
-const MAX_PTS = 2000;
-let allCharts = [];
-function destroyAll() { allCharts.forEach(c=>c.destroy()); allCharts=[]; }
-function mkChart(ctx, cfg) { cfg.options = cfg.options||{}; cfg.options.animation=false; cfg.options.responsive=true; const c=new Chart(ctx,cfg); allCharts.push(c); return c; }
-
-function timeSeries(data, toSec) {
-  const t=[],v=[];
-  for(const r of data){t.push(toSec(r.timestamp));v.push(r.value);}
-  return {times:t,values:v};
-}
-
-function sustainedPeriods(times,vals) {
-  const thresholds=[130,150,180,210,240,300,360,480,600], pts=[];
-  for(const th of thresholds){
-    let mx=0,start=null;
-    for(let i=0;i<vals.length;i++){
-      if(vals[i]>=th){if(start===null)start=times[i];}
-      else{if(start!==null){mx=Math.max(mx,times[i]-start);start=null;}}
+// Render a discrete Gantt-style timeline into a container
+function renderDiscreteTimeline(container, rows, minT, maxT) {
+  const span = maxT - minT || 1;
+  let html = '<div class="discrete-timeline">';
+  for (const row of rows) {
+    html += `<div class="disc-row"><div class="disc-label">${row.label}</div><div class="disc-track">`;
+    for (const seg of row.segments) {
+      const left = ((seg.start - minT) / span * 100);
+      const width = Math.max(((seg.end - seg.start) / span * 100), 0.2);
+      const color = row.colorFn ? row.colorFn(seg.value) : (seg.value ? '#22c55e' : '#ef4444');
+      const label = typeof seg.value === 'boolean' ? (seg.value ? 'TRUE' : 'FALSE') : seg.value;
+      html += `<div class="disc-seg" style="left:${left}%;width:${width}%;background:${color}" title="${row.label}: ${label} (${seg.start.toFixed(1)}s - ${seg.end.toFixed(1)}s)">${width>3?label:''}</div>`;
     }
-    if(start!==null) mx=Math.max(mx,times[times.length-1]-start);
-    if(mx>0.01) pts.push({x:th,y:mx});
+    html += '</div></div>';
   }
-  return pts;
+  html += '</div>';
+  html += `<div class="disc-axis"><span>${minT.toFixed(1)}s</span><span>${((minT+maxT)/2).toFixed(1)}s</span><span>${maxT.toFixed(1)}s</span></div>`;
+  container.innerHTML = html;
 }
 
-// ===================== TAB SYSTEM =====================
-const TABS = [];
-function addTab(id, label, renderFn) { TABS.push({id,label,renderFn}); }
-
-function initTabs() {
-  const bar = document.getElementById('tabBar');
-  const panels = document.getElementById('tabPanels');
-  bar.innerHTML = ''; panels.innerHTML = '';
-  TABS.forEach((tab,i) => {
-    const btn = document.createElement('button');
-    btn.className = 'tab-btn' + (i===0?' active':'');
-    btn.textContent = tab.label;
-    btn.onclick = () => {
-      bar.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-      panels.querySelectorAll('.tab-content').forEach(p=>p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('tab-'+tab.id).classList.add('active');
-    };
+// ============== TAB SYSTEM ==============
+const TABS=[];
+function addTab(id,label,renderFn){TABS.push({id,label,renderFn});}
+function initTabs(){
+  const bar=document.getElementById('tabBar'),panels=document.getElementById('tabPanels');
+  bar.innerHTML='';panels.innerHTML='';
+  TABS.forEach((tab,i)=>{
+    const btn=document.createElement('button');btn.className='tab-btn'+(i===0?' active':'');btn.textContent=tab.label;
+    btn.onclick=()=>{bar.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));panels.querySelectorAll('.tab-content').forEach(p=>p.classList.remove('active'));btn.classList.add('active');document.getElementById('tab-'+tab.id).classList.add('active');};
     bar.appendChild(btn);
-    const panel = document.createElement('div');
-    panel.id = 'tab-'+tab.id;
-    panel.className = 'tab-content'+(i===0?' active':'');
-    panels.appendChild(panel);
+    const panel=document.createElement('div');panel.id='tab-'+tab.id;panel.className='tab-content'+(i===0?' active':'');panels.appendChild(panel);
   });
 }
 
-// ===================== POWER TAB =====================
+// ============== POWER TAB ==============
 function renderPower(panel, P, toSec) {
-  // Total current: use ChannelCurrent sum as primary (more accurate), fallback to TotalCurrent
-  const channelEntry = P.get('/PowerDistribution/ChannelCurrent');
-  const totalEntry = P.get('/PowerDistribution/TotalCurrent');
-  const voltEntry = P.get('/SystemStats/BatteryVoltage') || P.get('/PowerDistribution/Voltage');
-  const battCurrEntry = P.get('/SystemStats/BatteryCurrent');
-
-  let currentTimes=[], currentValues=[];
-
-  // Prefer summing ChannelCurrent for accuracy
-  if (channelEntry && channelEntry.data.length > 0) {
-    for (const r of channelEntry.data) {
-      if (Array.isArray(r.value)) {
-        currentTimes.push(toSec(r.timestamp));
-        currentValues.push(r.value.reduce((a,b)=>a+b, 0));
-      }
-    }
-  }
-  // If ChannelCurrent has fewer points, also overlay TotalCurrent
-  let totalTimes=[], totalValues=[];
-  if (totalEntry && totalEntry.data.length > 0) {
-    for (const r of totalEntry.data) {
-      totalTimes.push(toSec(r.timestamp)); totalValues.push(r.value);
-    }
-  }
-  // Use whichever has more data as primary
-  if (totalTimes.length > currentTimes.length) {
-    currentTimes = totalTimes; currentValues = totalValues;
-  }
-
-  // Channel stats
-  const channelStats = [];
-  if (channelEntry && channelEntry.data.length > 0) {
-    const nc = channelEntry.data[0].value.length;
-    for (let ch=0; ch<nc; ch++) {
-      let sum=0,max=0,count=0;
-      for (const r of channelEntry.data) {
-        if(r.value&&r.value.length>ch){const v=r.value[ch];sum+=v;if(v>max)max=v;count++;}
-      }
-      channelStats.push({channel:ch, avg:count?sum/count:0, max});
-    }
-  }
-
-  // Voltage & battery current
-  const vd = voltEntry ? timeSeries(voltEntry.data, toSec) : {times:[],values:[]};
-  const bd = battCurrEntry ? timeSeries(battCurrEntry.data, toSec) : {times:[],values:[]};
-
-  // Stats
-  const peak = currentValues.length ? Math.max(...currentValues) : 0;
-  const avg = currentValues.length ? currentValues.reduce((a,b)=>a+b,0)/currentValues.length : 0;
-  const dur = currentTimes.length ? currentTimes[currentTimes.length-1]-currentTimes[0] : 0;
-  const minV = vd.values.length ? Math.min(...vd.values) : 0;
-  const avgV = vd.values.length ? vd.values.reduce((a,b)=>a+b,0)/vd.values.length : 0;
+  const chE=P.get('/PowerDistribution/ChannelCurrent'), totE=P.get('/PowerDistribution/TotalCurrent');
+  const voltE=P.get('/SystemStats/BatteryVoltage')||P.get('/PowerDistribution/Voltage');
+  const battE=P.get('/SystemStats/BatteryCurrent');
+  let cT=[],cV=[];
+  if(chE&&chE.data.length) for(const r of chE.data){if(Array.isArray(r.value)){cT.push(toSec(r.timestamp));cV.push(r.value.reduce((a,b)=>a+b,0));}}
+  let tT=[],tV=[];
+  if(totE&&totE.data.length) for(const r of totE.data){tT.push(toSec(r.timestamp));tV.push(r.value);}
+  if(tT.length>cT.length){cT=tT;cV=tV;}
+  const chStats=[];
+  if(chE&&chE.data.length){const nc=chE.data[0].value.length;for(let ch=0;ch<nc;ch++){let s=0,mx=0,ct=0;for(const r of chE.data){if(r.value&&r.value.length>ch){const v=r.value[ch];s+=v;if(v>mx)mx=v;ct++;}}chStats.push({channel:ch,avg:ct?s/ct:0,max:mx});}}
+  const vd=voltE?ts2(voltE.data,toSec):{times:[],values:[]};
+  const bd=battE?ts2(battE.data,toSec):{times:[],values:[]};
+  const peak=cV.length?Math.max(...cV):0, avg=cV.length?cV.reduce((a,b)=>a+b,0)/cV.length:0;
+  const dur=cT.length?cT[cT.length-1]-cT[0]:0;
+  const minV=vd.values.length?Math.min(...vd.values):0, avgV=vd.values.length?vd.values.reduce((a,b)=>a+b,0)/vd.values.length:0;
   let t120=0,t240=0,t360=0;
-  for(let i=1;i<currentValues.length;i++){
-    const dt=currentTimes[i]-currentTimes[i-1];
-    if(dt>0&&dt<1){if(currentValues[i]>120)t120+=dt;if(currentValues[i]>240)t240+=dt;if(currentValues[i]>360)t360+=dt;}
-  }
+  for(let i=1;i<cV.length;i++){const dt=cT[i]-cT[i-1];if(dt>0&&dt<1){if(cV[i]>120)t120+=dt;if(cV[i]>240)t240+=dt;if(cV[i]>360)t360+=dt;}}
+  const pCls=peak>360?'danger':peak>240?'warning':'ok', vCls=minV<7?'danger':minV<9?'warning':'ok';
 
-  const peakCls = peak>360?'danger':peak>240?'warning':'ok';
-  const vCls = minV<7?'danger':minV<9?'warning':'ok';
-
-  panel.innerHTML = `
+  panel.innerHTML=`
     <div id="pw-banner"></div>
     <div class="stats-grid">
-      <div class="stat-card ${peakCls}"><div class="label">Peak Total Current</div><div class="value">${peak.toFixed(1)} <span class="unit">A</span></div></div>
+      <div class="stat-card ${pCls}"><div class="label">Peak Total Current</div><div class="value">${peak.toFixed(1)} <span class="unit">A</span></div></div>
       <div class="stat-card"><div class="label">Avg Total Current</div><div class="value">${avg.toFixed(1)} <span class="unit">A</span></div></div>
       <div class="stat-card"><div class="label">Match Duration</div><div class="value">${dur.toFixed(1)} <span class="unit">s</span></div></div>
       <div class="stat-card ${vCls}"><div class="label">Min Battery Voltage</div><div class="value">${minV.toFixed(2)} <span class="unit">V</span></div></div>
@@ -396,348 +258,122 @@ function renderPower(panel, P, toSec) {
       <div class="stat-card ${t240>2?'danger':t240>0?'warning':'ok'}"><div class="label">Time &gt;240A (200%)</div><div class="value">${t240.toFixed(1)} <span class="unit">s</span></div></div>
       <div class="stat-card ${t360>0.5?'danger':'ok'}"><div class="label">Time &gt;360A (300%)</div><div class="value">${t360.toFixed(1)} <span class="unit">s</span></div></div>
     </div>
-
     <div class="section-title">Total Current vs CB285 Trip Limits</div>
     <div class="chart-box"><h3>Total Supply Current (sum of all PDH channels)</h3><canvas id="pwCurrent"></canvas>
-      <div class="legend">
-        <span><div class="dot" style="background:#3b82f6"></div>Total Current</span>
-        <span><div class="dot" style="background:#22c55e"></div>120A Rated</span>
-        <span><div class="dot" style="background:#f97316"></div>162A (135%) Trip Onset</span>
-        <span><div class="dot" style="background:#ef4444"></div>240A / 360A</span>
-      </div>
-    </div>
-
+      <div class="legend"><span><div class="dot" style="background:#3b82f6"></div>Total Current</span><span><div class="dot" style="background:#22c55e"></div>120A Rated</span><span><div class="dot" style="background:#f97316"></div>162A (135%)</span><span><div class="dot" style="background:#ef4444"></div>240A / 360A</span></div></div>
     <div class="section-title">Breaker Thermal Analysis</div>
     <div class="chart-box"><h3>Sustained Current vs CB285 Trip Band</h3><canvas id="pwTrip"></canvas></div>
-
     <div class="section-title">Battery</div>
     <div class="chart-row">
       <div class="chart-box"><h3>Battery Voltage</h3><canvas id="pwVolt"></canvas></div>
-      <div class="chart-box"><h3>Battery Current (SystemStats)</h3><canvas id="pwBattCurr"></canvas></div>
+      <div class="chart-box"><h3>Battery Current</h3><canvas id="pwBattCurr"></canvas></div>
     </div>
-
     <div class="section-title">Per-Channel PDH Currents</div>
-    <div class="chart-box">
-      <table class="data-table"><thead><tr><th>Ch</th><th>Avg (A)</th><th>Max (A)</th><th>% Total</th><th></th></tr></thead><tbody id="pwChTable"></tbody></table>
-    </div>
+    <div class="chart-box"><table class="data-table"><thead><tr><th>Ch</th><th>Avg (A)</th><th>Max (A)</th><th>% Total</th><th></th></tr></thead><tbody id="pwChTable"></tbody></table></div>
+    <div class="section-title">Subsystem Currents</div>
+    <div class="chart-box"><canvas id="pwSub"></canvas></div>`;
 
-    <div class="section-title">Subsystem Currents (actual motor currents only)</div>
-    <div class="chart-box"><h3>Current draw by subsystem</h3><canvas id="pwSub"></canvas></div>
-  `;
+  const bannerEl=panel.querySelector('#pw-banner');
+  if(peak>CB285_RATED*1.35){const lo=getTripTime(peak,'lower'),hi=getTripTime(peak,'upper');bannerEl.innerHTML=`<div class="banner danger"><strong>Breaker Trip Risk</strong> &mdash; Peak ${peak.toFixed(1)}A (${((peak/CB285_RATED)*100).toFixed(0)}%). CB285 trips between <strong>${lo.toFixed(1)}s</strong> and <strong>${hi.toFixed(1)}s</strong>. Time above 120A: ${t120.toFixed(1)}s.</div>`;}
+  else bannerEl.innerHTML=`<div class="banner ok"><strong>Breaker OK</strong> &mdash; Peak ${peak.toFixed(1)}A (${((peak/CB285_RATED)*100).toFixed(0)}% of rated).</div>`;
 
-  // Banner
-  const bannerEl = panel.querySelector('#pw-banner');
-  if (peak > CB285_RATED * 1.35) {
-    const lo = getTripTime(peak,'lower'), hi = getTripTime(peak,'upper');
-    bannerEl.innerHTML = `<div class="banner danger"><strong>Breaker Trip Risk</strong> &mdash; Peak ${peak.toFixed(1)}A (${((peak/CB285_RATED)*100).toFixed(0)}%). CB285 trips between <strong>${lo.toFixed(1)}s</strong> and <strong>${hi.toFixed(1)}s</strong> at this current. Time above 120A: ${t120.toFixed(1)}s.</div>`;
-  } else {
-    bannerEl.innerHTML = `<div class="banner ok"><strong>Breaker OK</strong> &mdash; Peak ${peak.toFixed(1)}A (${((peak/CB285_RATED)*100).toFixed(0)}% of rated).</div>`;
-  }
+  const cd=dsMax(cT,cV,MAX_PTS);
+  mkChart(panel.querySelector('#pwCurrent'),{type:'line',data:{labels:cd.times.map(t=>t.toFixed(1)),datasets:[{data:cd.values,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false},annotation:{annotations:{r:{type:'line',yMin:120,yMax:120,borderColor:'#22c55e',borderWidth:2,borderDash:[6,4],label:{display:true,content:'120A',position:'start',backgroundColor:'rgba(34,197,94,0.8)',font:{size:10}}},l:{type:'line',yMin:162,yMax:162,borderColor:'#f97316',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'162A (135%)',position:'start',backgroundColor:'rgba(249,115,22,0.8)',font:{size:10}}},u2:{type:'line',yMin:240,yMax:240,borderColor:'#ef4444',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'240A (200%)',position:'start',backgroundColor:'rgba(239,68,68,0.8)',font:{size:10}}},u3:{type:'line',yMin:360,yMax:360,borderColor:'#ef4444',borderWidth:1,borderDash:[2,4],label:{display:true,content:'360A (300%)',position:'end',backgroundColor:'rgba(239,68,68,0.6)',font:{size:10}}}}}}}});
 
-  // Current chart
-  const cd = dsMax(currentTimes, currentValues, MAX_PTS);
-  mkChart(panel.querySelector('#pwCurrent'), {
-    type:'line',
-    data:{labels:cd.times.map(t=>t.toFixed(1)), datasets:[{
-      label:'Total Current (A)', data:cd.values, borderColor:'#3b82f6',
-      backgroundColor:'rgba(59,130,246,0.08)', fill:true, borderWidth:1.5, pointRadius:0, tension:0.1
-    }]},
-    options:{
-      scales:{
-        x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},
-        y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}
-      },
-      plugins:{legend:{display:false},annotation:{annotations:{
-        r:{type:'line',yMin:120,yMax:120,borderColor:'#22c55e',borderWidth:2,borderDash:[6,4],label:{display:true,content:'120A Rated',position:'start',backgroundColor:'rgba(34,197,94,0.8)',font:{size:10}}},
-        l:{type:'line',yMin:162,yMax:162,borderColor:'#f97316',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'162A (135%)',position:'start',backgroundColor:'rgba(249,115,22,0.8)',font:{size:10}}},
-        u2:{type:'line',yMin:240,yMax:240,borderColor:'#ef4444',borderWidth:1.5,borderDash:[4,4],label:{display:true,content:'240A (200%)',position:'start',backgroundColor:'rgba(239,68,68,0.8)',font:{size:10}}},
-        u3:{type:'line',yMin:360,yMax:360,borderColor:'#ef4444',borderWidth:1,borderDash:[2,4],label:{display:true,content:'360A (300%)',position:'end',backgroundColor:'rgba(239,68,68,0.6)',font:{size:10}}}
-      }}}
-    }
-  });
+  const sp=sustainedPeriods(cT,cV);
+  mkChart(panel.querySelector('#pwTrip'),{type:'scatter',data:{datasets:[{label:'Trip Lower',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.lower})),borderColor:'#f97316',showLine:true,borderWidth:2,pointRadius:3,fill:false},{label:'Trip Upper',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.upper})),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',showLine:true,borderWidth:2,pointRadius:3,fill:'-1'},{label:'Your Robot',data:sp,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.8)',pointRadius:6,pointStyle:'crossRot',showLine:false}]},options:{scales:{x:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:120},y:{type:'logarithmic',title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0.1,max:1000}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
 
-  // Trip curve scatter
-  const sp = sustainedPeriods(currentTimes, currentValues);
-  mkChart(panel.querySelector('#pwTrip'), {
-    type:'scatter',
-    data:{datasets:[
-      {label:'Trip Lower Limit',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.lower})),borderColor:'#f97316',showLine:true,borderWidth:2,pointRadius:3,fill:false},
-      {label:'Trip Upper Limit',data:CB285_TRIP.map(p=>({x:p.pct*1.2,y:p.upper})),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',showLine:true,borderWidth:2,pointRadius:3,fill:'-1'},
-      {label:'Your Robot',data:sp,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.8)',pointRadius:6,pointStyle:'crossRot',showLine:false}
-    ]},
-    options:{
-      scales:{
-        x:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:120},
-        y:{type:'logarithmic',title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',callback:v=>v+'s'},grid:{color:'rgba(255,255,255,0.05)'},min:0.1,max:1000}
-      },
-      plugins:{legend:{labels:{color:'#e4e4e7'}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.x.toFixed(0)}A for ${c.parsed.y.toFixed(1)}s`}}}
-    }
-  });
+  if(vd.times.length){const v=dsMax(vd.times,vd.values,MAX_PTS);mkChart(panel.querySelector('#pwVolt'),{type:'line',data:{labels:v.times.map(t=>t.toFixed(1)),datasets:[{data:v.values,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},suggestedMin:6,suggestedMax:14}},plugins:{legend:{display:false}}}});}
+  if(bd.times.length){const b=dsMax(bd.times,bd.values,MAX_PTS);mkChart(panel.querySelector('#pwBattCurr'),{type:'line',data:{labels:b.times.map(t=>t.toFixed(1)),datasets:[{data:b.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});}
 
-  // Voltage
-  if(vd.times.length){
-    const vv=dsMax(vd.times,vd.values,MAX_PTS);
-    mkChart(panel.querySelector('#pwVolt'),{type:'line',data:{labels:vv.times.map(t=>t.toFixed(1)),datasets:[{data:vv.values,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},suggestedMin:6,suggestedMax:14}},plugins:{legend:{display:false}}}});
-  }
+  const tbody=panel.querySelector('#pwChTable');const totalAvg=chStats.reduce((s,c)=>s+c.avg,0);const sorted=[...chStats].sort((a,b)=>b.avg-a.avg);const maxAvg=sorted.length?sorted[0].avg:1;
+  for(const ch of sorted){if(ch.avg<0.01&&ch.max<0.1)continue;const pct=totalAvg>0?(ch.avg/totalAvg*100):0;const cls=ch.max>40?'danger':ch.max>20?'hot':'';const tr=document.createElement('tr');tr.innerHTML=`<td>Ch ${ch.channel}</td><td>${ch.avg.toFixed(2)}</td><td>${ch.max.toFixed(1)}</td><td>${pct.toFixed(1)}%</td><td><div class="bar ${cls}" style="width:${(ch.avg/maxAvg*100).toFixed(0)}%"></div></td>`;tbody.appendChild(tr);}
 
-  // Battery current
-  if(bd.times.length){
-    const bb=dsMax(bd.times,bd.values,MAX_PTS);
-    mkChart(panel.querySelector('#pwBattCurr'),{type:'line',data:{labels:bb.times.map(t=>t.toFixed(1)),datasets:[{data:bb.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});
-  }
-
-  // Channel table
-  const tbody = panel.querySelector('#pwChTable');
-  const totalAvg = channelStats.reduce((s,c)=>s+c.avg,0);
-  const sorted = [...channelStats].sort((a,b)=>b.avg-a.avg);
-  const maxAvg = sorted.length?sorted[0].avg:1;
-  for(const ch of sorted){
-    if(ch.avg<0.01&&ch.max<0.1) continue;
-    const pct = totalAvg>0?(ch.avg/totalAvg*100):0;
-    const cls = ch.max>40?'danger':ch.max>20?'hot':'';
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>Ch ${ch.channel}</td><td>${ch.avg.toFixed(2)}</td><td>${ch.max.toFixed(1)}</td><td>${pct.toFixed(1)}%</td><td><div class="bar ${cls}" style="width:${(ch.avg/maxAvg*100).toFixed(0)}%"></div></td>`;
-    tbody.appendChild(tr);
-  }
-
-  // Subsystem currents - ONLY use actual current fields
-  const subDefs = [
-    {name:'Drive (all)', entries:[/\/Drive\/Module\d+\/DriveCurrentAmps/]},
-    {name:'Turn (all)', entries:[/\/Drive\/Module\d+\/TurnCurrentAmps/]},
-    {name:'Extensor', entries:[/\/Subsystems\/Extensor\/ExtensorCurrent$/]},
-    {name:'Spindexer', entries:[/\/Subsystems\/Spindexer\/SpindexerCurrent$/]},
-    {name:'Roller', entries:[/\/Subsystems\/Roller\/RollerCurrent$/]},
-    {name:'Kicker', entries:[/\/Subsystems\/Kicker\/KickerCurrent$/]},
-    {name:'Climber', entries:[/\/Subsystems\/Climber\/ClimberCurrent$/]},
-    {name:'Turret', entries:[/\/Subsystems\/Shooter\/Turret\/\/Current$/]},
-  ];
-  const subDS=[], subLabelsRef={len:0,arr:[]};
-  subDefs.forEach((sd,si)=>{
-    let allE=[];
-    sd.entries.forEach(re=>{allE=allE.concat(P.match(re));});
-    if(!allE.length) return;
-    // Sum per 20ms bucket
-    const buckets=new Map();
-    for(const e of allE) for(const r of e.data){
-      if(typeof r.value!=='number') continue;
-      const t=Math.round(toSec(r.timestamp)/0.02)*0.02;
-      buckets.set(t,(buckets.get(t)||0)+r.value);
-    }
-    const s=[...buckets.entries()].sort((a,b)=>a[0]-b[0]);
-    const t=s.map(x=>x[0]),v=s.map(x=>x[1]);
-    const d=dsMax(t,v,MAX_PTS);
-    subDS.push({label:sd.name,data:d.values,borderColor:COLORS[si%COLORS.length],borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});
-    if(d.times.length>subLabelsRef.len){subLabelsRef.len=d.times.length;subLabelsRef.arr=d.times;}
-  });
-  mkChart(panel.querySelector('#pwSub'),{type:'line',data:{labels:subLabelsRef.arr.map(t=>t.toFixed(1)),datasets:subDS},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
+  const subDefs=[{name:'Drive (all)',entries:[/\/Drive\/Module\d+\/DriveCurrentAmps/]},{name:'Turn (all)',entries:[/\/Drive\/Module\d+\/TurnCurrentAmps/]},{name:'Extensor',entries:[/\/Subsystems\/Extensor\/ExtensorCurrent$/]},{name:'Spindexer',entries:[/\/Subsystems\/Spindexer\/SpindexerCurrent$/]},{name:'Roller',entries:[/\/Subsystems\/Roller\/RollerCurrent$/]},{name:'Kicker',entries:[/\/Subsystems\/Kicker\/KickerCurrent$/]},{name:'Climber',entries:[/\/Subsystems\/Climber\/ClimberCurrent$/]},{name:'Turret',entries:[/\/Subsystems\/Shooter\/Turret\/\/Current$/]}];
+  const subDS=[],subLR={len:0,arr:[]};
+  subDefs.forEach((sd,si)=>{let ae=[];sd.entries.forEach(re=>{ae=ae.concat(P.match(re));});if(!ae.length)return;const bk=new Map();for(const e of ae)for(const r of e.data){if(typeof r.value!=='number')continue;const t=Math.round(toSec(r.timestamp)/0.02)*0.02;bk.set(t,(bk.get(t)||0)+r.value);}const s=[...bk.entries()].sort((a,b)=>a[0]-b[0]);const t=s.map(x=>x[0]),v=s.map(x=>x[1]);const d=dsMax(t,v,MAX_PTS);subDS.push({label:sd.name,data:d.values,borderColor:COLORS[si%COLORS.length],borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});if(d.times.length>subLR.len){subLR.len=d.times.length;subLR.arr=d.times;}});
+  mkChart(panel.querySelector('#pwSub'),{type:'line',data:{labels:subLR.arr.map(t=>t.toFixed(1)),datasets:subDS},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Current (A)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
 }
 
-// ===================== POSE ESTIMATION TAB =====================
+// ============== POSE ESTIMATION TAB ==============
 function renderPose(panel, P, toSec) {
-  const currentEst = P.get('/RealOutputs/PoseEstimator/CurrentPoseEstimator');
-  const cameras = [
-    {key:'Arducam_Front_Left', label:'Arducam Front Left', color:'#3b82f6',
-     pose:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Left/EstimatedPose'),
-     state:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Left/StateMeasure')},
-    {key:'Arducam_Front_Right', label:'Arducam Front Right', color:'#22c55e',
-     pose:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Right/EstimatedPose'),
-     state:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Right/StateMeasure')},
-    {key:'limelight-bleft', label:'Limelight Back-Left', color:'#f97316',
-     pose:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bleft/Pose'),
-     state:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bleft/State')},
-    {key:'limelight-bright', label:'Limelight Back-Right', color:'#ef4444',
-     pose:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bright/Pose'),
-     state:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bright/State')},
+  const curEst=P.get('/RealOutputs/PoseEstimator/CurrentPoseEstimator');
+  const cameras=[
+    {key:'AFL',label:'Arducam Front Left',color:'#3b82f6',state:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Left/StateMeasure')},
+    {key:'AFR',label:'Arducam Front Right',color:'#22c55e',state:P.get('/RealOutputs/PoseEstimator/PhotonVision/Arducam_Front_Right/StateMeasure')},
+    {key:'LBL',label:'Limelight Back-Left',color:'#f97316',state:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bleft/State')},
+    {key:'LBR',label:'Limelight Back-Right',color:'#ef4444',state:P.get('/RealOutputs/PoseEstimator/Limelight/limelight-bright/State')},
   ];
+  const stdX=P.get('/RealOutputs/Vision/VisionStandardDeviationX'),stdY=P.get('/RealOutputs/Vision/VisionStandardDeviationY');
 
-  const visionPose = P.get('/RealOutputs/Vision/PoseSentToEstimator');
-  const odometryPose = P.get('/RealOutputs/Odometry/Robot');
-  const visionPoseVision = P.get('/RealOutputs/Odometry/PoseVision');
-  const stdDevX = P.get('/RealOutputs/Vision/VisionStandardDeviationX');
-  const stdDevY = P.get('/RealOutputs/Vision/VisionStandardDeviationY');
-  const stdDevZ = P.get('/RealOutputs/Vision/VisionStandardDeviationZ');
+  let minT=Infinity,maxT=0;
+  cameras.forEach(c=>{if(c.state&&c.state.data.length){const a=toSec(c.state.data[0].timestamp),b=toSec(c.state.data[c.state.data.length-1].timestamp);if(a<minT)minT=a;if(b>maxT)maxT=b;}});
+  if(curEst&&curEst.data.length){const a=toSec(curEst.data[0].timestamp),b=toSec(curEst.data[curEst.data.length-1].timestamp);if(a<minT)minT=a;if(b>maxT)maxT=b;}
 
-  // Compute timeline extents
-  let minT=Infinity, maxT=0;
-  cameras.forEach(c=>{
-    if(c.state&&c.state.data.length){
-      const t0=toSec(c.state.data[0].timestamp), t1=toSec(c.state.data[c.state.data.length-1].timestamp);
-      if(t0<minT)minT=t0; if(t1>maxT)maxT=t1;
-    }
-  });
-  if(currentEst&&currentEst.data.length){
-    const t0=toSec(currentEst.data[0].timestamp), t1=toSec(currentEst.data[currentEst.data.length-1].timestamp);
-    if(t0<minT)minT=t0; if(t1>maxT)maxT=t1;
-  }
-  const totalSpan = maxT-minT||1;
+  let estStats={};
+  if(curEst&&curEst.data.length)for(let i=1;i<curEst.data.length;i++){const dt=toSec(curEst.data[i].timestamp)-toSec(curEst.data[i-1].timestamp),v=curEst.data[i-1].value;if(dt>0&&dt<1&&v)estStats[v]=(estStats[v]||0)+dt;}
+  const camStats=cameras.map(c=>{let active=0,total=0;if(c.state&&c.state.data.length)for(let i=1;i<c.state.data.length;i++){const dt=toSec(c.state.data[i].timestamp)-toSec(c.state.data[i-1].timestamp),v=c.state.data[i-1].value;if(dt>0&&dt<1){total+=dt;if(v&&v!=='NULL'&&v!=='IDLE'&&v!=='NO_TARGET'&&v!=='')active+=dt;}}return{...c,activeTime:active,totalTime:total};});
 
-  // Camera usage stats
-  let camStats = cameras.map(c=>{
-    let active=0, total=0;
-    if(c.state&&c.state.data.length){
-      for(let i=1;i<c.state.data.length;i++){
-        const dt=toSec(c.state.data[i].timestamp)-toSec(c.state.data[i-1].timestamp);
-        if(dt>0&&dt<1){
-          total+=dt;
-          const v=c.state.data[i-1].value;
-          if(v&&v!=='NULL'&&v!=='IDLE'&&v!=='NO_TARGET'&&v!=='') active+=dt;
-        }
-      }
-    }
-    return {...c, activeTime:active, totalTime:total};
-  });
-
-  // Current estimator timeline
-  let estStats = {};
-  if(currentEst&&currentEst.data.length){
-    for(let i=1;i<currentEst.data.length;i++){
-      const dt=toSec(currentEst.data[i].timestamp)-toSec(currentEst.data[i-1].timestamp);
-      const v=currentEst.data[i-1].value;
-      if(dt>0&&dt<1&&v){estStats[v]=(estStats[v]||0)+dt;}
-    }
-  }
-
-  panel.innerHTML = `
+  const totalEst=Object.values(estStats).reduce((a,b)=>a+b,0);
+  panel.innerHTML=`
     <div class="section-title">Active Pose Estimator</div>
-    <div class="stats-grid" id="poseEstStats"></div>
-
+    <div class="stats-grid">${Object.entries(estStats).sort((a,b)=>b[1]-a[1]).map(([n,t])=>`<div class="stat-card"><div class="label">${n}</div><div class="value">${t.toFixed(1)} <span class="unit">s (${(t/totalEst*100).toFixed(0)}%)</span></div></div>`).join('')}</div>
     <div class="section-title">Camera Activity Timeline</div>
-    <div class="chart-box">
-      <h3>Which cameras were providing pose estimates over time</h3>
-      <div class="camera-timeline" id="camTimeline"></div>
-      <div style="display:flex;gap:6px;margin-top:8px;font-size:11px;color:var(--text-muted)">
-        <span>0s</span><span style="flex:1;text-align:center">${(totalSpan/2).toFixed(0)}s</span><span>${totalSpan.toFixed(0)}s</span>
-      </div>
-    </div>
-
+    <div class="chart-box"><h3>Camera state over time (colored segments = actively providing estimates)</h3><div id="camTimeline"></div></div>
     <div class="section-title">Camera Usage Summary</div>
-    <div class="stats-grid" id="camUsageStats"></div>
-
+    <div class="stats-grid">${camStats.map(c=>`<div class="stat-card"><div class="label" style="color:${c.color}">${c.label}</div><div class="value">${c.activeTime.toFixed(1)} <span class="unit">s active</span></div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${c.totalTime>0?((c.activeTime/c.totalTime*100).toFixed(0)):0}% of tracked time</div></div>`).join('')}</div>
     <div class="section-title">Vision Standard Deviations</div>
-    <div class="chart-box"><h3>Vision measurement uncertainty over time</h3><canvas id="poseStdDev"></canvas></div>
+    <div class="chart-box"><canvas id="poseStdDev"></canvas></div>
+    <div class="section-title">Current Estimator Over Time</div>
+    <div class="chart-box"><div id="estTimeline"></div></div>`;
 
-    <div class="section-title">Current Pose Estimator Over Time</div>
-    <div class="chart-box"><h3>Active estimator source</h3><canvas id="poseEstChart"></canvas></div>
-  `;
+  // Camera discrete timeline
+  const camRows = cameras.filter(c=>c.state&&c.state.data.length).map(cam => ({
+    label: cam.label,
+    segments: buildSegments(cam.state, toSec),
+    colorFn: v => (v&&v!=='NULL'&&v!=='IDLE'&&v!=='NO_TARGET'&&v!=='') ? cam.color : '#333'
+  }));
+  renderDiscreteTimeline(panel.querySelector('#camTimeline'), camRows, minT, maxT);
 
-  // Estimator stats
-  const estGrid = panel.querySelector('#poseEstStats');
-  const totalEst = Object.values(estStats).reduce((a,b)=>a+b,0);
-  let estHTML = '';
-  for(const [name,time] of Object.entries(estStats).sort((a,b)=>b[1]-a[1])){
-    estHTML+=`<div class="stat-card"><div class="label">${name}</div><div class="value">${time.toFixed(1)} <span class="unit">s (${(time/totalEst*100).toFixed(0)}%)</span></div></div>`;
-  }
-  estGrid.innerHTML = estHTML;
-
-  // Camera timeline
-  const tlEl = panel.querySelector('#camTimeline');
-  cameras.forEach(cam=>{
-    if(!cam.state||!cam.state.data.length) return;
-    const row = document.createElement('div'); row.className='cam-row';
-    const lbl = document.createElement('div'); lbl.className='cam-label'; lbl.textContent=cam.label;
-    const track = document.createElement('div'); track.className='cam-track';
-
-    // Find active segments
-    let segStart=null;
-    for(let i=0;i<cam.state.data.length;i++){
-      const t=toSec(cam.state.data[i].timestamp);
-      const v=cam.state.data[i].value;
-      const isActive = v&&v!=='NULL'&&v!=='IDLE'&&v!=='NO_TARGET'&&v!=='';
-      if(isActive&&segStart===null) segStart=t;
-      else if(!isActive&&segStart!==null){
-        const seg=document.createElement('div'); seg.className='cam-seg';
-        seg.style.left=((segStart-minT)/totalSpan*100)+'%';
-        seg.style.width=(Math.max((t-segStart)/totalSpan*100,0.3))+'%';
-        seg.style.background=cam.color;
-        seg.title=`${cam.label}: ${segStart.toFixed(1)}s - ${t.toFixed(1)}s`;
-        track.appendChild(seg);
-        segStart=null;
-      }
-    }
-    if(segStart!==null){
-      const t=toSec(cam.state.data[cam.state.data.length-1].timestamp);
-      const seg=document.createElement('div'); seg.className='cam-seg';
-      seg.style.left=((segStart-minT)/totalSpan*100)+'%';
-      seg.style.width=(Math.max((t-segStart)/totalSpan*100,0.3))+'%';
-      seg.style.background=cam.color;
-      track.appendChild(seg);
-    }
-    row.appendChild(lbl); row.appendChild(track); tlEl.appendChild(row);
-  });
-
-  // Camera usage stats
-  const usageGrid = panel.querySelector('#camUsageStats');
-  usageGrid.innerHTML = camStats.map(c=>`
-    <div class="stat-card"><div class="label" style="color:${c.color}">${c.label}</div>
-    <div class="value">${c.activeTime.toFixed(1)} <span class="unit">s active</span></div>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${c.totalTime>0?((c.activeTime/c.totalTime*100).toFixed(0)):0}% of tracked time</div></div>
-  `).join('');
-
-  // Std dev chart
-  if(stdDevX&&stdDevX.data.length){
-    const sx=timeSeries(stdDevX.data,toSec), sy=timeSeries(stdDevY.data,toSec);
-    const dsx=ds(sx.times,sx.values,MAX_PTS), dsy=ds(sy.times,sy.values,MAX_PTS);
-    mkChart(panel.querySelector('#poseStdDev'),{type:'line',data:{labels:dsx.times.map(t=>t.toFixed(1)),datasets:[
-      {label:'Std Dev X',data:dsx.values,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false},
-      {label:'Std Dev Y',data:dsy.values,borderColor:'#22c55e',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false},
-    ]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
+  // Estimator discrete timeline
+  if(curEst&&curEst.data.length){
+    const estSegs = buildSegments(curEst, toSec);
+    renderDiscreteTimeline(panel.querySelector('#estTimeline'), [{label:'Active Estimator', segments:estSegs, colorFn:stateColor}], minT, maxT);
   }
 
-  // Estimator over time (encode as numeric for chart)
-  if(currentEst&&currentEst.data.length){
-    const estNames=[...new Set(currentEst.data.map(r=>r.value))].filter(Boolean).sort();
-    const estMap={}; estNames.forEach((n,i)=>{estMap[n]=i;});
-    const t=[],v=[];
-    for(const r of currentEst.data){t.push(toSec(r.timestamp));v.push(estMap[r.value]??-1);}
-    const dd=ds(t,v,MAX_PTS);
-    mkChart(panel.querySelector('#poseEstChart'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{
-      data:dd.values,borderColor:'#06b6d4',borderWidth:2,pointRadius:0,stepped:true,fill:false
-    }]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af',callback:v=>{const i=Math.round(v);return estNames[i]||'';},stepSize:1},grid:{color:'rgba(255,255,255,0.05)'},min:-0.5,max:estNames.length-0.5}},plugins:{legend:{display:false}}}});
+  if(stdX&&stdX.data.length){
+    const sx=ts2(stdX.data,toSec),sy=ts2(stdY.data,toSec);const dsx=ds(sx.times,sx.values,MAX_PTS),dsy=ds(sy.times,sy.values,MAX_PTS);
+    mkChart(panel.querySelector('#poseStdDev'),{type:'line',data:{labels:dsx.times.map(t=>t.toFixed(1)),datasets:[{label:'Std Dev X',data:dsx.values,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false},{label:'Std Dev Y',data:dsy.values,borderColor:'#22c55e',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7'}}}}});
   }
 }
 
-// ===================== MECHANISM TAB =====================
+// ============== MECHANISM TAB ==============
 function renderMechanism(panel, P, toSec, config) {
-  // config: {title, setpoint, current, atTarget?, current2?(for current draw), velocity?, voltage?}
-  const sp = config.setpoint ? P.get(config.setpoint) : null;
-  const cur = config.current ? P.get(config.current) : null;
-  const at = config.atTarget ? P.get(config.atTarget) : null;
-  const err = config.error ? P.get(config.error) : null;
-  const motorCur = config.motorCurrent ? P.get(config.motorCurrent) : null;
-  const vel = config.velocity ? P.get(config.velocity) : null;
-  const volt = config.voltage ? P.get(config.voltage) : null;
-  const state = config.state ? P.get(config.state) : null;
+  const sp=config.setpoint?P.get(config.setpoint):null;
+  const cur=config.current?P.get(config.current):null;
+  const at=config.atTarget?P.get(config.atTarget):null;
+  const err=config.error?P.get(config.error):null;
+  const motorCur=config.motorCurrent?P.get(config.motorCurrent):null;
+  const vel=config.velocity?P.get(config.velocity):null;
+  const volt=config.voltage?P.get(config.voltage):null;
+  const state=config.state?P.get(config.state):null;
 
-  // Compute stats
-  let atTargetPct = 0, atTargetTime = 0, totalTime = 0;
-  if (at && at.data.length) {
-    for(let i=1;i<at.data.length;i++){
-      const dt=toSec(at.data[i].timestamp)-toSec(at.data[i-1].timestamp);
-      if(dt>0&&dt<1){totalTime+=dt;if(at.data[i-1].value)atTargetTime+=dt;}
-    }
-    atTargetPct = totalTime>0?(atTargetTime/totalTime*100):0;
-  }
+  // Compute at-target stats
+  let atTargetPct=0,atTargetTime=0,totalTime=0;
+  if(at&&at.data.length){for(let i=1;i<at.data.length;i++){const dt=toSec(at.data[i].timestamp)-toSec(at.data[i-1].timestamp);if(dt>0&&dt<1){totalTime+=dt;if(at.data[i-1].value)atTargetTime+=dt;}}atTargetPct=totalTime>0?(atTargetTime/totalTime*100):0;}
 
+  // Error
   let maxErr=0,avgErr=0;
-  if(err&&err.data.length){
-    let s=0;
-    for(const r of err.data){const e=Math.abs(r.value);s+=e;if(e>maxErr)maxErr=e;}
-    avgErr=s/err.data.length;
-  } else if(sp&&cur&&sp.data.length&&cur.data.length){
-    // Compute error from setpoint-current at matching timestamps (approximate)
-    // Use a simple approach: for each current sample, find nearest setpoint
-    let spIdx=0, s=0, count=0;
-    for(const r of cur.data){
-      while(spIdx<sp.data.length-1&&sp.data[spIdx+1].timestamp<=r.timestamp) spIdx++;
-      const e=Math.abs(sp.data[spIdx].value-r.value);
-      s+=e;if(e>maxErr)maxErr=e;count++;
-    }
-    avgErr=count>0?s/count:0;
-  }
+  if(err&&err.data.length){let s=0;for(const r of err.data){const e=Math.abs(r.value);s+=e;if(e>maxErr)maxErr=e;}avgErr=s/err.data.length;}
+  else if(sp&&cur&&sp.data.length&&cur.data.length){let si2=0,s=0,count=0;for(const r of cur.data){while(si2<sp.data.length-1&&sp.data[si2+1].timestamp<=r.timestamp)si2++;const e=Math.abs(sp.data[si2].value-r.value);s+=e;if(e>maxErr)maxErr=e;count++;}avgErr=count>0?s/count:0;}
 
-  const atCls = atTargetPct>90?'ok':atTargetPct>70?'warning':'danger';
+  const atCls=atTargetPct>90?'ok':atTargetPct>70?'warning':'danger';
 
-  panel.innerHTML = `
+  // Get timeline extents
+  let minT=Infinity,maxT=0;
+  [sp,cur,at,state].forEach(e=>{if(e&&e.data.length){const a=toSec(e.data[0].timestamp),b=toSec(e.data[e.data.length-1].timestamp);if(a<minT)minT=a;if(b>maxT)maxT=b;}});
+
+  panel.innerHTML=`
     <div class="section-title">${config.title}</div>
     <div class="stats-grid">
       ${at?`<div class="stat-card ${atCls}"><div class="label">At Target</div><div class="value">${atTargetPct.toFixed(1)} <span class="unit">%</span></div></div>`:''}
@@ -745,238 +381,387 @@ function renderMechanism(panel, P, toSec, config) {
       <div class="stat-card ${maxErr>5?'danger':maxErr>2?'warning':'ok'}"><div class="label">Max Error</div><div class="value">${maxErr.toFixed(2)} <span class="unit">${config.unit||''}</span></div></div>
       <div class="stat-card"><div class="label">Avg Error</div><div class="value">${avgErr.toFixed(3)} <span class="unit">${config.unit||''}</span></div></div>
     </div>
-
-    <div class="chart-box">
-      <h3>Setpoint vs Actual ${config.unit?'('+config.unit+')':''}</h3>
-      <canvas id="mechMain"></canvas>
-      <div class="legend">
-        <span><div class="dot" style="background:#f97316"></div>Setpoint</span>
-        <span><div class="dot" style="background:#3b82f6"></div>Actual</span>
-        ${at?'<span><div class="dot" style="background:rgba(34,197,94,0.2)"></div>At Target (green bg)</span>':''}
-      </div>
-    </div>
-
-    ${err?`<div class="chart-box"><h3>Error Over Time</h3><canvas id="mechErr"></canvas></div>`:''}
-
+    <div class="chart-box"><h3>Setpoint vs Actual ${config.unit?'('+config.unit+')':''}</h3><canvas id="mechMain"></canvas>
+      <div class="legend"><span><div class="dot" style="background:#f97316"></div>Setpoint</span><span><div class="dot" style="background:#3b82f6"></div>Actual</span>${at?'<span><div class="dot" style="background:rgba(34,197,94,0.2)"></div>At Target</span>':''}</div></div>
+    ${err?'<div class="chart-box"><h3>Error Over Time</h3><canvas id="mechErr"></canvas></div>':''}
     <div class="chart-row">
-      ${motorCur?`<div class="chart-box"><h3>Motor Current (A)</h3><canvas id="mechCurr"></canvas></div>`:''}
-      ${vel?`<div class="chart-box"><h3>Velocity</h3><canvas id="mechVel"></canvas></div>`:''}
+      ${motorCur?'<div class="chart-box"><h3>Motor Current (A)</h3><canvas id="mechCurr"></canvas></div>':''}
+      ${vel?'<div class="chart-box"><h3>Velocity</h3><canvas id="mechVel"></canvas></div>':''}
     </div>
-
-    ${volt?`<div class="chart-box"><h3>Applied Voltage</h3><canvas id="mechVolt"></canvas></div>`:''}
-
-    ${state?`<div class="chart-box"><h3>State Over Time</h3><canvas id="mechState"></canvas></div>`:''}
-  `;
+    ${volt?'<div class="chart-box"><h3>Applied Voltage</h3><canvas id="mechVolt"></canvas></div>':''}
+    ${state?'<div class="section-title">State Timeline</div><div class="chart-box"><div id="mechStateTimeline"></div></div>':''}
+    ${at?'<div class="section-title">At Target Timeline</div><div class="chart-box"><div id="mechAtTargetTimeline"></div></div>':''}`;
 
   // Main setpoint vs actual chart
-  const datasets = [];
-  let labels = [];
-  if(sp&&sp.data.length){
-    const d=timeSeries(sp.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
-    datasets.push({label:'Setpoint',data:dd.values,borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.1,fill:false,stepped:config.stepped||false});
-    if(dd.times.length>labels.length)labels=dd.times;
-  }
-  if(cur&&cur.data.length){
-    const d=timeSeries(cur.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
-    datasets.push({label:'Actual',data:dd.values,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});
-    if(dd.times.length>labels.length)labels=dd.times;
-  }
+  const datasets=[];let labels=[];
+  if(sp&&sp.data.length){const d=ts2(sp.data,toSec),dd=ds(d.times,d.values,MAX_PTS);datasets.push({label:'Setpoint',data:dd.values,borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.1,fill:false,stepped:config.stepped||false});if(dd.times.length>labels.length)labels=dd.times;}
+  if(cur&&cur.data.length){const d=ts2(cur.data,toSec),dd=ds(d.times,d.values,MAX_PTS);datasets.push({label:'Actual',data:dd.values,borderColor:'#3b82f6',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false});if(dd.times.length>labels.length)labels=dd.times;}
 
-  // At-target background annotation boxes
-  let annotations = {};
-  if(at&&at.data.length){
-    let segStart=null, segIdx=0;
-    for(let i=0;i<at.data.length;i++){
-      const t=toSec(at.data[i].timestamp);
-      if(at.data[i].value&&segStart===null) segStart=t;
-      else if(!at.data[i].value&&segStart!==null){
-        annotations['at'+segIdx++]={type:'box',xMin:segStart.toFixed(1),xMax:t.toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};
-        segStart=null;
-      }
-    }
-    if(segStart!==null){
-      const t=toSec(at.data[at.data.length-1].timestamp);
-      annotations['at'+segIdx]={type:'box',xMin:segStart.toFixed(1),xMax:t.toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};
-    }
+  let annotations={};
+  if(at&&at.data.length){let ss=null,si3=0;for(let i=0;i<at.data.length;i++){const t=toSec(at.data[i].timestamp);if(at.data[i].value&&ss===null)ss=t;else if(!at.data[i].value&&ss!==null){annotations['at'+si3++]={type:'box',xMin:ss.toFixed(1),xMax:t.toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};ss=null;}}if(ss!==null)annotations['at'+si3]={type:'box',xMin:ss.toFixed(1),xMax:toSec(at.data[at.data.length-1].timestamp).toFixed(1),backgroundColor:'rgba(34,197,94,0.07)',borderWidth:0};}
+  mkChart(panel.querySelector('#mechMain'),{type:'line',data:{labels:labels.map(t=>t.toFixed(1)),datasets},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:config.unit||'',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{labels:{color:'#e4e4e7'}},annotation:{annotations}}}});
+
+  if(err&&err.data.length&&panel.querySelector('#mechErr')){const d=ts2(err.data,toSec),dd=ds(d.times,d.values,MAX_PTS);mkChart(panel.querySelector('#mechErr'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});}
+  if(motorCur&&motorCur.data.length&&panel.querySelector('#mechCurr')){const d=ts2(motorCur.data,toSec),dd=dsMax(d.times,d.values,MAX_PTS);mkChart(panel.querySelector('#mechCurr'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});}
+  if(vel&&vel.data.length&&panel.querySelector('#mechVel')){const d=ts2(vel.data,toSec),dd=ds(d.times,d.values,MAX_PTS);mkChart(panel.querySelector('#mechVel'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#06b6d4',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});}
+  if(volt&&volt.data.length&&panel.querySelector('#mechVolt')){const d=ts2(volt.data,toSec),dd=ds(d.times,d.values,MAX_PTS);mkChart(panel.querySelector('#mechVolt'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#eab308',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});}
+
+  // Discrete state timeline
+  if(state&&state.data.length&&panel.querySelector('#mechStateTimeline')){
+    const segs=buildSegments(state,toSec);
+    renderDiscreteTimeline(panel.querySelector('#mechStateTimeline'),[{label:config.title+' State',segments:segs,colorFn:stateColor}],minT,maxT);
   }
-
-  mkChart(panel.querySelector('#mechMain'),{type:'line',data:{labels:labels.map(t=>t.toFixed(1)),datasets},options:{
-    scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:config.unit||'',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},
-    plugins:{legend:{labels:{color:'#e4e4e7'}},annotation:{annotations}}
-  }});
-
-  // Error chart
-  if(err&&err.data.length&&panel.querySelector('#mechErr')){
-    const d=timeSeries(err.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
-    mkChart(panel.querySelector('#mechErr'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});
-  }
-
-  // Motor current
-  if(motorCur&&motorCur.data.length&&panel.querySelector('#mechCurr')){
-    const d=timeSeries(motorCur.data,toSec), dd=dsMax(d.times,d.values,MAX_PTS);
-    mkChart(panel.querySelector('#mechCurr'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});
-  }
-
-  // Velocity
-  if(vel&&vel.data.length&&panel.querySelector('#mechVel')){
-    const d=timeSeries(vel.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
-    mkChart(panel.querySelector('#mechVel'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#06b6d4',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});
-  }
-
-  // Voltage
-  if(volt&&volt.data.length&&panel.querySelector('#mechVolt')){
-    const d=timeSeries(volt.data,toSec), dd=ds(d.times,d.values,MAX_PTS);
-    mkChart(panel.querySelector('#mechVolt'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#eab308',borderWidth:1.5,pointRadius:0,tension:0.1,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'}}},plugins:{legend:{display:false}}}});
-  }
-
-  // State
-  if(state&&state.data.length&&panel.querySelector('#mechState')){
-    const stNames=[...new Set(state.data.map(r=>r.value))].filter(Boolean).sort();
-    const stMap={}; stNames.forEach((n,i)=>{stMap[n]=i;});
-    const t=[],v=[];
-    for(const r of state.data){t.push(toSec(r.timestamp));v.push(stMap[r.value]??-1);}
-    const dd=ds(t,v,MAX_PTS);
-    mkChart(panel.querySelector('#mechState'),{type:'line',data:{labels:dd.times.map(t=>t.toFixed(1)),datasets:[{data:dd.values,borderColor:'#a78bfa',borderWidth:2,pointRadius:0,stepped:true,fill:false}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af',callback:v=>{const i=Math.round(v);return stNames[i]||'';},stepSize:1},grid:{color:'rgba(255,255,255,0.05)'},min:-0.5,max:stNames.length-0.5}},plugins:{legend:{display:false}}}});
+  // Discrete at-target timeline
+  if(at&&at.data.length&&panel.querySelector('#mechAtTargetTimeline')){
+    const segs=buildBoolSegments(at,toSec);
+    renderDiscreteTimeline(panel.querySelector('#mechAtTargetTimeline'),[{label:'At Target',segments:segs,colorFn:v=>v?'#22c55e':'#ef4444'}],minT,maxT);
   }
 }
 
-// ===================== MECHANISM CONFIGS =====================
+// ============== SHOOTER READY TAB ==============
+function renderShooterReady(panel, P, toSec) {
+  const fwAt=P.get('/Subsystems/Shooter/FlyWheels//AtTarget');
+  const turAt=P.get('/Subsystems/Shooter/Turret//AtTarget');
+  const hoodAt=P.get('/Subsystems/Shooter/Hood//AtTarget');
+
+  // Compute "all ready" boolean series by merging the three at-target booleans
+  // For each timestamp, all must be true
+  const allEntries = [fwAt, turAt, hoodAt].filter(Boolean);
+
+  // Find timeline extents
+  let minT=Infinity, maxT=0;
+  allEntries.forEach(e=>{if(e.data.length){const a=toSec(e.data[0].timestamp),b=toSec(e.data[e.data.length-1].timestamp);if(a<minT)minT=a;if(b>maxT)maxT=b;}});
+
+  // Build merged timeline: sample at ~20ms intervals
+  const step=0.02;
+  const nSteps=Math.ceil((maxT-minT)/step);
+
+  // For each entry, build a lookup: sorted array of {time, value}
+  function buildLookup(entry) {
+    if(!entry||!entry.data.length) return ()=>false;
+    const d=entry.data.map(r=>({t:toSec(r.timestamp),v:r.value}));
+    return (t)=>{
+      // Binary search
+      let lo=0,hi=d.length-1;
+      while(lo<hi){const m=(lo+hi+1)>>1;if(d[m].t<=t)lo=m;else hi=m-1;}
+      return d[lo].v;
+    };
+  }
+  const fwLookup=buildLookup(fwAt), turLookup=buildLookup(turAt), hoodLookup=buildLookup(hoodAt);
+
+  // Build boolean segments for each + "all ready"
+  const fwSegs=fwAt?buildBoolSegments(fwAt,toSec):[];
+  const turSegs=turAt?buildBoolSegments(turAt,toSec):[];
+  const hoodSegs=hoodAt?buildBoolSegments(hoodAt,toSec):[];
+
+  // Build "all ready" segments
+  const allReadyData=[];
+  for(let i=0;i<nSteps;i++){
+    const t=minT+i*step;
+    const fw=fwLookup(t),tur=turLookup(t),hood=hoodLookup(t);
+    allReadyData.push({t,v:fw&&tur&&hood});
+  }
+  // Convert to segments
+  const allSegs=[];
+  if(allReadyData.length){
+    let cv=allReadyData[0].v, cs=allReadyData[0].t;
+    for(let i=1;i<allReadyData.length;i++){
+      if(allReadyData[i].v!==cv){allSegs.push({start:cs,end:allReadyData[i].t,value:cv});cv=allReadyData[i].v;cs=allReadyData[i].t;}
+    }
+    allSegs.push({start:cs,end:allReadyData[allReadyData.length-1].t,value:cv});
+  }
+
+  // Stats
+  let readyTime=0,totalTime2=maxT-minT;
+  allSegs.forEach(s=>{if(s.value)readyTime+=s.end-s.start;});
+  const readyPct=totalTime2>0?(readyTime/totalTime2*100):0;
+
+  let fwReady=0;fwSegs.forEach(s=>{if(s.value)fwReady+=s.end-s.start;});
+  let turReady=0;turSegs.forEach(s=>{if(s.value)turReady+=s.end-s.start;});
+  let hoodReady=0;hoodSegs.forEach(s=>{if(s.value)hoodReady+=s.end-s.start;});
+
+  const rCls=readyPct>80?'ok':readyPct>50?'warning':'danger';
+
+  panel.innerHTML=`
+    <div class="section-title">Shooter Readiness</div>
+    <div class="stats-grid">
+      <div class="stat-card ${rCls}"><div class="label">All Systems Ready</div><div class="value">${readyPct.toFixed(1)} <span class="unit">%</span></div></div>
+      <div class="stat-card"><div class="label">Ready Time</div><div class="value">${readyTime.toFixed(1)} <span class="unit">s / ${totalTime2.toFixed(1)}s</span></div></div>
+      <div class="stat-card ${fwAt?'':''}"><div class="label">Flywheel At Target</div><div class="value">${fwReady.toFixed(1)} <span class="unit">s</span></div></div>
+      <div class="stat-card"><div class="label">Turret At Target</div><div class="value">${turReady.toFixed(1)} <span class="unit">s</span></div></div>
+      <div class="stat-card"><div class="label">Hood At Target</div><div class="value">${hoodReady.toFixed(1)} <span class="unit">s</span></div></div>
+    </div>
+    <div class="section-title">Discrete Timeline</div>
+    <div class="chart-box"><h3>Green = at target / ready, Red = not ready</h3><div id="shooterReadyTimeline"></div></div>`;
+
+  const rows = [
+    {label:'Flywheel At Target', segments:fwSegs, colorFn:v=>v?'#22c55e':'#ef4444'},
+    {label:'Turret At Target', segments:turSegs, colorFn:v=>v?'#22c55e':'#ef4444'},
+    {label:'Hood At Target', segments:hoodSegs, colorFn:v=>v?'#22c55e':'#ef4444'},
+    {label:'ALL READY', segments:allSegs, colorFn:v=>v?'#22c55e':'#ef4444'},
+  ];
+  renderDiscreteTimeline(panel.querySelector('#shooterReadyTimeline'), rows, minT, maxT);
+}
+
+// ============== ALERTS / CONSOLE TAB ==============
+function renderAlerts(panel, P, toSec) {
+  const alertErrors = P.get('/RealOutputs/Alerts/errors');
+  const alertWarnings = P.get('/RealOutputs/Alerts/warnings');
+  const alertInfos = P.get('/RealOutputs/Alerts/infos');
+  const photonErrors = P.get('/RealOutputs/PhotonAlerts/errors');
+  const photonWarnings = P.get('/RealOutputs/PhotonAlerts/warnings');
+  const photonInfos = P.get('/RealOutputs/PhotonAlerts/infos');
+  const pathErrors = P.get('/RealOutputs/PathPlanner/errors');
+  const pathWarnings = P.get('/RealOutputs/PathPlanner/warnings');
+  const pathInfos = P.get('/RealOutputs/PathPlanner/infos');
+  const consoleEntry = P.get('/RealOutputs/Console');
+
+  // Collect all alerts with first-seen / last-seen timestamps
+  const alertMap = new Map(); // message -> {type, source, firstTs, lastTs, count}
+
+  function processAlertEntry(entry, type, source) {
+    if (!entry || !entry.data.length) return;
+    // Track which messages are present in each record
+    let prevMessages = new Set();
+    for (const r of entry.data) {
+      const msgs = Array.isArray(r.value) ? r.value : [];
+      const t = toSec(r.timestamp);
+      for (const m of msgs) {
+        if (!m) continue;
+        const key = type + '|' + source + '|' + m;
+        if (!alertMap.has(key)) {
+          alertMap.set(key, {type, source, message: m, firstTs: t, lastTs: t, count: 1});
+        } else {
+          const a = alertMap.get(key);
+          a.lastTs = t;
+          if (!prevMessages.has(m)) a.count++;
+        }
+      }
+      prevMessages = new Set(msgs);
+    }
+  }
+
+  processAlertEntry(alertErrors, 'error', 'Alerts');
+  processAlertEntry(alertWarnings, 'warning', 'Alerts');
+  processAlertEntry(alertInfos, 'info', 'Alerts');
+  processAlertEntry(photonErrors, 'error', 'PhotonAlerts');
+  processAlertEntry(photonWarnings, 'warning', 'PhotonAlerts');
+  processAlertEntry(photonInfos, 'info', 'PhotonAlerts');
+  processAlertEntry(pathErrors, 'error', 'PathPlanner');
+  processAlertEntry(pathWarnings, 'warning', 'PathPlanner');
+  processAlertEntry(pathInfos, 'info', 'PathPlanner');
+
+  // Console messages
+  const consoleMessages = [];
+  if (consoleEntry && consoleEntry.data.length) {
+    let prevVal = '';
+    for (const r of consoleEntry.data) {
+      if (r.value && r.value !== prevVal) {
+        consoleMessages.push({ts: toSec(r.timestamp), text: r.value});
+        prevVal = r.value;
+      }
+    }
+  }
+
+  // Parse console for specific patterns
+  const loopOverruns = [];
+  const warnings = [];
+  for (const cm of consoleMessages) {
+    const lines = cm.text.split('\n');
+    for (const line of lines) {
+      if (line.includes('loop overrun') || line.includes('Loop time of')) {
+        loopOverruns.push(cm.ts);
+      }
+      if (line.includes('Warning at')) {
+        // Extract subsystem timing
+        const matches = [...cm.text.matchAll(/\t(\w+(?:\.\w+)*(?:\(\))?): ([\d.]+)s/g)];
+        for (const m of matches) {
+          if (parseFloat(m[2]) > 0.005) {
+            warnings.push({ts: cm.ts, subsystem: m[1], time: parseFloat(m[2])});
+          }
+        }
+      }
+    }
+  }
+
+  // Sort alerts
+  const allAlerts = [...alertMap.values()].sort((a,b) => {
+    const typeOrder = {error:0, warning:1, info:2};
+    if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
+    return a.firstTs - b.firstTs;
+  });
+
+  const errorCount = allAlerts.filter(a=>a.type==='error').length;
+  const warnCount = allAlerts.filter(a=>a.type==='warning').length;
+  const infoCount = allAlerts.filter(a=>a.type==='info').length;
+
+  panel.innerHTML = `
+    <div class="section-title">Alert Summary</div>
+    <div class="stats-grid">
+      <div class="stat-card ${errorCount>0?'danger':'ok'}"><div class="label">Errors</div><div class="value">${errorCount}</div></div>
+      <div class="stat-card ${warnCount>0?'warning':'ok'}"><div class="label">Warnings</div><div class="value">${warnCount}</div></div>
+      <div class="stat-card"><div class="label">Info</div><div class="value">${infoCount}</div></div>
+      <div class="stat-card ${loopOverruns.length>10?'warning':'ok'}"><div class="label">Loop Overruns</div><div class="value">${loopOverruns.length}</div></div>
+    </div>
+
+    <div class="section-title">All Alerts</div>
+    <div class="chart-box" style="overflow-x:auto">
+      <table class="data-table" id="alertTable">
+        <thead><tr><th>Type</th><th>Source</th><th>Message</th><th>First Seen</th><th>Last Seen</th><th>Duration</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="section-title">Alert Timeline</div>
+    <div class="chart-box"><div id="alertTimeline"></div></div>
+
+    ${warnings.length ? `
+    <div class="section-title">Slow Subsystem Periodic Calls (&gt;5ms)</div>
+    <div class="chart-box" style="overflow-x:auto">
+      <table class="data-table" id="slowTable">
+        <thead><tr><th>Timestamp</th><th>Subsystem</th><th>Time (ms)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>` : ''}
+
+    <div class="section-title">Console Log</div>
+    <div class="chart-box" style="max-height:400px;overflow-y:auto">
+      <table class="data-table" id="consoleTable">
+        <thead><tr><th style="width:80px">Time (s)</th><th>Message</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>`;
+
+  // Fill alert table
+  const alertTbody = panel.querySelector('#alertTable tbody');
+  for (const a of allAlerts) {
+    const dur = a.lastTs - a.firstTs;
+    const tr = document.createElement('tr');
+    tr.className = 'alert-row-' + a.type;
+    tr.innerHTML = `<td><span class="alert-type ${a.type}">${a.type.toUpperCase()}</span></td><td>${a.source}</td><td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.message.replace(/"/g,'&quot;')}">${a.message}</td><td>${a.firstTs.toFixed(1)}s</td><td>${a.lastTs.toFixed(1)}s</td><td>${dur.toFixed(1)}s</td>`;
+    alertTbody.appendChild(tr);
+  }
+
+  // Alert timeline
+  let aMinT=Infinity,aMaxT=0;
+  allAlerts.forEach(a=>{if(a.firstTs<aMinT)aMinT=a.firstTs;if(a.lastTs>aMaxT)aMaxT=a.lastTs;});
+  if(allAlerts.length){
+    const typeColors = {error:'#ef4444',warning:'#f97316',info:'#22c55e'};
+    const rows = allAlerts.map(a=>({
+      label: a.type.charAt(0).toUpperCase()+a.type.slice(1)+': '+a.message.slice(0,40),
+      segments:[{start:a.firstTs,end:Math.max(a.lastTs,a.firstTs+0.5),value:a.type}],
+      colorFn: v=>typeColors[v]||'#666'
+    }));
+    renderDiscreteTimeline(panel.querySelector('#alertTimeline'),rows,aMinT,aMaxT);
+  }
+
+  // Slow subsystem table
+  if (warnings.length) {
+    const slowTbody = panel.querySelector('#slowTable tbody');
+    for (const w of warnings.sort((a,b)=>b.time-a.time).slice(0,50)) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${w.ts.toFixed(1)}s</td><td>${w.subsystem}</td><td style="color:${w.time>20?'var(--red)':w.time>10?'var(--orange)':'var(--text)'}">${(w.time*1000).toFixed(1)}</td>`;
+      slowTbody.appendChild(tr);
+    }
+  }
+
+  // Console table
+  const conTbody = panel.querySelector('#consoleTable tbody');
+  for (const cm of consoleMessages) {
+    const tr = document.createElement('tr');
+    const escaped = cm.text.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const colored = escaped.includes('overrun') || escaped.includes('Warning') ? 'color:var(--orange)' : escaped.includes('Error') ? 'color:var(--red)' : '';
+    tr.innerHTML = `<td>${cm.ts.toFixed(1)}s</td><td style="white-space:pre-wrap;font-size:11px;${colored}">${escaped}</td>`;
+    conTbody.appendChild(tr);
+  }
+}
+
+// ============== MECHANISM CONFIGS ==============
 const MECHANISMS = [
-  {
-    id:'shooter', label:'Shooter',
-    tabs:[
-      {id:'hood', title:'Hood', setpoint:'/Subsystems/Shooter/Hood//TargetAngle', current:'/Subsystems/Shooter/Hood//CurrentAngle',
-       atTarget:'/Subsystems/Shooter/Hood//AtTarget', error:'/Subsystems/Shooter/Hood//AngleError', unit:'deg',
-       state:'/RealOutputs/States/HoodState'},
-      {id:'turret', title:'Turret', setpoint:'/Subsystems/Shooter/Turret//TargetAngle', current:'/Subsystems/Shooter/Turret//CurrentAngle',
-       atTarget:'/Subsystems/Shooter/Turret//AtTarget', motorCurrent:'/Subsystems/Shooter/Turret//Current',
-       voltage:'/Subsystems/Shooter/Turret//Voltage', unit:'deg',
-       state:'/RealOutputs/States/TurretState'},
-      {id:'flywheels', title:'Flywheels', setpoint:'/Subsystems/Shooter/FlyWheels//TargetVelocity', current:'/Subsystems/Shooter/FlyWheels//CurrentVelocity',
-       atTarget:'/Subsystems/Shooter/FlyWheels//AtTarget', unit:'RPM',
-       state:'/RealOutputs/States/FlyWheelState'},
-    ]
-  },
-  {
-    id:'extensor', label:'Extensor',
-    tabs:[{id:'ext', title:'Extensor', setpoint:'/Subsystems/Extensor/ExtensorSetpoint', current:'/Subsystems/Extensor/ExtensorPosition',
-      motorCurrent:'/Subsystems/Extensor/ExtensorCurrent', velocity:'/Subsystems/Extensor/ExtensorVelocity',
-      voltage:'/Subsystems/Extensor/ExtensorVoltage', unit:'pos',
-      state:'/RealOutputs/States/ExtensorState'}]
-  },
-  {
-    id:'climber', label:'Climber',
-    tabs:[{id:'clmb', title:'Climber', setpoint:'/Subsystems/Climber/ClimberSetpoint', current:'/Subsystems/Climber/ClimberPosition',
-      motorCurrent:'/Subsystems/Climber/ClimberCurrent', velocity:'/Subsystems/Climber/ClimberVelocity',
-      unit:'pos', state:'/RealOutputs/States/ClimberState'}]
-  },
-  {
-    id:'kicker', label:'Kicker',
-    tabs:[{id:'kick', title:'Kicker', setpoint:'/Subsystems/Kicker/KickerSetpoint', current:'/Subsystems/Kicker/KickerPosition',
-      motorCurrent:'/Subsystems/Kicker/KickerCurrent', velocity:'/Subsystems/Kicker/KickerVelocity',
-      unit:'pos', state:'/RealOutputs/States/KickersState'}]
-  },
-  {
-    id:'roller', label:'Roller',
-    tabs:[{id:'roll', title:'Roller', setpoint:'/Subsystems/Roller/RollerSetpoint', current:'/Subsystems/Roller/RollerPosition',
-      motorCurrent:'/Subsystems/Roller/RollerCurrent', velocity:'/Subsystems/Roller/RollerVelocity',
-      voltage:'/Subsystems/Roller/RollerVoltage', unit:'pos',
-      state:'/RealOutputs/States/RollerState'}]
-  },
-  {
-    id:'spindexer', label:'Spindexer',
-    tabs:[{id:'spin', title:'Spindexer', setpoint:'/Subsystems/Spindexer/SpindexerSetpoint', current:'/Subsystems/Spindexer/SpindexerPosition',
-      motorCurrent:'/Subsystems/Spindexer/SpindexerCurrent', velocity:'/Subsystems/Spindexer/SpindexerVelocity',
-      unit:'pos', state:'/RealOutputs/States/SpindexerState'}]
-  },
+  {id:'shooter', label:'Shooter', tabs:[
+    {id:'ready', title:'Ready Status', custom:'shooterReady'},
+    {id:'hood', title:'Hood', setpoint:'/Subsystems/Shooter/Hood//TargetAngle', current:'/Subsystems/Shooter/Hood//CurrentAngle', atTarget:'/Subsystems/Shooter/Hood//AtTarget', error:'/Subsystems/Shooter/Hood//AngleError', unit:'deg', state:'/RealOutputs/States/HoodState'},
+    {id:'turret', title:'Turret', setpoint:'/Subsystems/Shooter/Turret//TargetAngle', current:'/Subsystems/Shooter/Turret//CurrentAngle', atTarget:'/Subsystems/Shooter/Turret//AtTarget', motorCurrent:'/Subsystems/Shooter/Turret//Current', voltage:'/Subsystems/Shooter/Turret//Voltage', unit:'deg', state:'/RealOutputs/States/TurretState'},
+    {id:'flywheels', title:'Flywheels', setpoint:'/Subsystems/Shooter/FlyWheels//TargetVelocity', current:'/Subsystems/Shooter/FlyWheels//CurrentVelocity', atTarget:'/Subsystems/Shooter/FlyWheels//AtTarget', unit:'RPM', state:'/RealOutputs/States/FlyWheelState'},
+  ]},
+  {id:'extensor', label:'Extensor', tabs:[
+    {id:'ext', title:'Extensor', setpoint:'/Subsystems/Extensor/ExtensorSetpoint', current:'/Subsystems/Extensor/ExtensorPosition', motorCurrent:'/Subsystems/Extensor/ExtensorCurrent', velocity:'/Subsystems/Extensor/ExtensorVelocity', voltage:'/Subsystems/Extensor/ExtensorVoltage', unit:'rotations', state:'/RealOutputs/States/ExtensorState'}
+  ]},
+  {id:'climber', label:'Climber', tabs:[
+    {id:'clmb', title:'Climber', setpoint:'/Subsystems/Climber/ClimberSetpoint', current:'/Subsystems/Climber/ClimberPosition', motorCurrent:'/Subsystems/Climber/ClimberCurrent', velocity:'/Subsystems/Climber/ClimberVelocity', unit:'rotations', state:'/RealOutputs/States/ClimberState'}
+  ]},
+  {id:'kicker', label:'Kicker', tabs:[
+    {id:'kick', title:'Kicker', setpoint:'/Subsystems/Kicker/KickerSetpoint', current:'/Subsystems/Kicker/KickerVelocity', motorCurrent:'/Subsystems/Kicker/KickerCurrent', velocity:'/Subsystems/Kicker/KickerVelocity', unit:'rad/s', state:'/RealOutputs/States/KickersState'}
+  ]},
+  {id:'roller', label:'Roller', tabs:[
+    {id:'roll', title:'Roller', setpoint:'/Subsystems/Roller/RollerSetpoint', current:'/Subsystems/Roller/RollerVelocity', motorCurrent:'/Subsystems/Roller/RollerCurrent', velocity:'/Subsystems/Roller/RollerVelocity', voltage:'/Subsystems/Roller/RollerVoltage', unit:'rad/s', state:'/RealOutputs/States/RollerState'}
+  ]},
+  {id:'spindexer', label:'Spindexer', tabs:[
+    {id:'spin', title:'Spindexer', setpoint:'/Subsystems/Spindexer/SpindexerSetpoint', current:'/Subsystems/Spindexer/SpindexerVelocity', motorCurrent:'/Subsystems/Spindexer/SpindexerCurrent', velocity:'/Subsystems/Spindexer/SpindexerVelocity', unit:'rad/s', state:'/RealOutputs/States/SpindexerState'}
+  ]},
 ];
 
-// ===================== FILE HANDLING =====================
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const uploadSection = document.getElementById('upload-section');
-const loadingDiv = document.getElementById('loading');
-const app = document.getElementById('app');
+// ============== FILE HANDLING ==============
+const dropZone=document.getElementById('dropZone'),fileInput=document.getElementById('fileInput');
+const uploadSection=document.getElementById('upload-section'),loadingDiv=document.getElementById('loading'),app=document.getElementById('app');
+dropZone.addEventListener('click',()=>fileInput.click());
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',()=>{if(fileInput.files.length)loadFile(fileInput.files[0]);});
 
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); if(e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); });
-fileInput.addEventListener('change', () => { if(fileInput.files.length) loadFile(fileInput.files[0]); });
-
-function loadFile(file) {
-  uploadSection.style.display='none'; loadingDiv.style.display='block'; app.style.display='none';
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const P = new WPILOGParser(e.target.result);
-      P.parse();
-      loadingDiv.style.display='none'; app.style.display='block';
-      buildDashboard(P);
-    } catch(err) {
-      loadingDiv.textContent='Error: '+err.message; console.error(err);
-    }
-  };
+function loadFile(file){
+  uploadSection.style.display='none';loadingDiv.style.display='block';app.style.display='none';
+  const reader=new FileReader();
+  reader.onload=e=>{try{const P=new WPILOGParser(e.target.result);P.parse();loadingDiv.style.display='none';app.style.display='block';buildDashboard(P);}catch(err){loadingDiv.textContent='Error: '+err.message;console.error(err);}};
   reader.readAsArrayBuffer(file);
 }
 
-function buildDashboard(P) {
-  destroyAll();
-  TABS.length = 0;
+function buildDashboard(P){
+  destroyAll();TABS.length=0;
+  let minTs=Infinity;for(const[,recs]of P.records)if(recs.length&&recs[0].timestamp<minTs)minTs=recs[0].timestamp;
+  const toSec=ts=>(ts-minTs)/1e6;
 
-  // Find min timestamp
-  let minTs=Infinity;
-  for(const [,recs] of P.records) if(recs.length&&recs[0].timestamp<minTs) minTs=recs[0].timestamp;
-  const toSec = ts => (ts-minTs)/1e6;
-
-  // Register tabs
   addTab('power','Power',panel=>renderPower(panel,P,toSec));
   addTab('pose','Pose Estimation',panel=>renderPose(panel,P,toSec));
 
   for(const mech of MECHANISMS){
-    if(mech.tabs.length===1){
-      addTab(mech.id, mech.label, panel=>renderMechanism(panel,P,toSec,mech.tabs[0]));
-    } else {
-      // Multi-sub mechanism (Shooter has Hood, Turret, Flywheels)
-      addTab(mech.id, mech.label, panel=>{
-        panel.innerHTML = '<div class="tab-bar" id="sub-'+mech.id+'-bar"></div><div id="sub-'+mech.id+'-panels"></div>';
-        const subBar = panel.querySelector('#sub-'+mech.id+'-bar');
-        const subPanels = panel.querySelector('#sub-'+mech.id+'-panels');
+    addTab(mech.id,mech.label,panel=>{
+      if(mech.tabs.length===1&&!mech.tabs[0].custom){
+        renderMechanism(panel,P,toSec,mech.tabs[0]);
+      } else {
+        panel.innerHTML='<div class="tab-bar" id="sub-'+mech.id+'-bar"></div><div id="sub-'+mech.id+'-panels"></div>';
+        const subBar=panel.querySelector('#sub-'+mech.id+'-bar');
+        const subPanels=panel.querySelector('#sub-'+mech.id+'-panels');
+        const subRendered=new Set();
         mech.tabs.forEach((st,si)=>{
-          const btn=document.createElement('button');
-          btn.className='tab-btn'+(si===0?' active':'');
-          btn.textContent=st.title;
+          const btn=document.createElement('button');btn.className='tab-btn'+(si===0?' active':'');btn.textContent=st.title;
+          const sp2=document.createElement('div');sp2.id='subtab-'+st.id;sp2.className='tab-content'+(si===0?' active':'');
           btn.onclick=()=>{
             subBar.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
             subPanels.querySelectorAll('.tab-content').forEach(p=>p.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('subtab-'+st.id).classList.add('active');
+            btn.classList.add('active');sp2.classList.add('active');
+            if(!subRendered.has(st.id)){subRendered.add(st.id);renderSubTab(st);}
           };
-          subBar.appendChild(btn);
-          const sp=document.createElement('div');
-          sp.id='subtab-'+st.id;
-          sp.className='tab-content'+(si===0?' active':'');
-          subPanels.appendChild(sp);
-          renderMechanism(sp,P,toSec,st);
+          subBar.appendChild(btn);subPanels.appendChild(sp2);
+          function renderSubTab(st2){
+            if(st2.custom==='shooterReady') renderShooterReady(sp2,P,toSec);
+            else renderMechanism(sp2,P,toSec,st2);
+          }
+          if(si===0){subRendered.add(st.id);renderSubTab(st);}
         });
-      });
-    }
+      }
+    });
   }
 
+  addTab('alerts','Alerts / Console',panel=>renderAlerts(panel,P,toSec));
+
   initTabs();
-  // Render first tab
   TABS[0].renderFn(document.getElementById('tab-'+TABS[0].id));
-  // Lazy render other tabs on first click
-  const rendered = new Set([TABS[0].id]);
-  document.querySelectorAll('.tab-btn').forEach((btn,i)=>{
-    const origClick = btn.onclick;
-    btn.onclick = () => {
-      origClick();
-      if(!rendered.has(TABS[i].id)){
-        rendered.add(TABS[i].id);
-        TABS[i].renderFn(document.getElementById('tab-'+TABS[i].id));
-      }
-    };
+  const rendered=new Set([TABS[0].id]);
+  document.querySelectorAll('#tabBar .tab-btn').forEach((btn,i)=>{
+    const orig=btn.onclick;
+    btn.onclick=()=>{orig();if(!rendered.has(TABS[i].id)){rendered.add(TABS[i].id);TABS[i].renderFn(document.getElementById('tab-'+TABS[i].id));}};
   });
 }
 </script>

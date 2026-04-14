@@ -109,6 +109,84 @@
     .sub-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
     .sub-tab-panel { display: none; }
     .sub-tab-panel.active { display: block; }
+
+    /* ===== Landing / Hero ===== */
+    .hero {
+      max-width: 1100px; margin: 32px auto 20px; padding: 28px 36px;
+      background: linear-gradient(135deg, rgba(59,130,246,0.10) 0%, rgba(167,139,250,0.06) 50%, rgba(6,182,212,0.10) 100%);
+      border: 1px solid var(--border); border-radius: 16px;
+      display: grid; grid-template-columns: minmax(240px, 1fr) 2fr; gap: 28px; align-items: center;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background: radial-gradient(circle at 20% 50%, rgba(59,130,246,0.12), transparent 60%);
+    }
+    .hero-img { width: 100%; max-width: 320px; height: auto; border-radius: 12px; display: block; filter: drop-shadow(0 10px 30px rgba(0,0,0,0.5)); position: relative; z-index: 1; }
+    .hero-text { position: relative; z-index: 1; }
+    .hero-brand { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+    .hero-logo {
+      width: 52px; height: 52px; border-radius: 10px; flex-shrink:0;
+      background: linear-gradient(135deg, #3b82f6 0%, #a78bfa 100%);
+      display:flex; align-items:center; justify-content:center;
+      font-weight: 900; font-size: 20px; letter-spacing: 1px; color:#fff;
+      box-shadow: 0 6px 18px rgba(59,130,246,0.35);
+    }
+    .hero-team { font-size: 28px; font-weight: 800; letter-spacing: 2px; background: linear-gradient(90deg,#60a5fa,#a78bfa,#06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip:text; }
+    .hero-team-sub { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; text-transform: uppercase; }
+    .hero-title { font-size: 22px; font-weight: 600; margin-top:4px; }
+    .hero-sub { color: var(--text-muted); font-size: 13px; margin-top:4px; }
+    @media (max-width: 760px) { .hero { grid-template-columns: 1fr; text-align:center; } .hero-img { margin: 0 auto; } .hero-brand { justify-content:center; } }
+
+    .upload-zone { max-width: 1100px; margin: 0 auto 16px; border: 2px dashed var(--border); border-radius: 12px; padding: 36px 40px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface); }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: var(--surface2); transform: translateY(-1px); }
+
+    /* ===== Match grid cards ===== */
+    .match-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-top: 14px; }
+    .match-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+      cursor: pointer; transition: all 0.15s; position: relative; overflow: hidden; min-height: 120px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .match-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+    .match-card.disabled { cursor: default; opacity: 0.45; }
+    .match-card.disabled:hover { border-color: var(--border); transform: none; box-shadow: none; }
+    .match-card .mc-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+    .match-card .mc-badge {
+      display:inline-flex; align-items:center; justify-content:center;
+      min-width: 28px; height: 22px; padding: 0 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+    }
+    .match-card .mc-badge.q { background: rgba(59,130,246,0.18); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
+    .match-card .mc-badge.e { background: rgba(239,68,68,0.18); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+    .match-card .mc-badge.p { background: rgba(249,115,22,0.18); color: #fb923c; border: 1px solid rgba(249,115,22,0.4); }
+    .match-card .mc-badge.unk { background: rgba(156,163,175,0.15); color: var(--text-muted); border: 1px solid var(--border); }
+    .match-card .mc-source { font-size: 10px; color: var(--text-muted); }
+    .match-card .mc-source.session { color: var(--green); }
+    .match-card .mc-source.cloud { color: var(--cyan); }
+    .match-card .mc-num { font-size: 32px; font-weight: 800; letter-spacing: -1px; color: var(--text); line-height: 1; margin: 4px 0; }
+    .match-card .mc-event { font-size: 12px; color: var(--text); font-weight: 600; }
+    .match-card .mc-date { font-size: 11px; color: var(--text-muted); }
+    .match-card .mc-stats { margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 10px; color: var(--text-muted); display:flex; gap:10px; flex-wrap:wrap; }
+    .match-card .mc-stats b { color: var(--text); font-weight: 600; }
+
+    /* ===== Corner match badge on dashboard ===== */
+    .match-corner {
+      position: fixed; top: 12px; right: 18px; z-index: 500;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 6px 14px; display:flex; align-items:center; gap:10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4); pointer-events:none;
+    }
+    .match-corner .mcb-type {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+      padding: 2px 7px; border-radius: 3px;
+    }
+    .match-corner .mcb-type.q { background: rgba(59,130,246,0.25); color: #60a5fa; }
+    .match-corner .mcb-type.e { background: rgba(239,68,68,0.25); color: #f87171; }
+    .match-corner .mcb-type.p { background: rgba(249,115,22,0.25); color: #fb923c; }
+    .match-corner .mcb-num { font-size: 28px; font-weight: 900; line-height: 1; letter-spacing: -1px; color: var(--text); }
+    .match-corner .mcb-meta { font-size: 10px; color: var(--text-muted); line-height: 1.3; text-align: right; }
+    .match-corner .mcb-meta b { color: var(--text); font-weight:600; display:block; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -122,14 +200,29 @@
     </div>
   </header>
   <div id="upload-section">
-    <div class="upload-zone" id="dropZone">
-      <h2>Drop .wpilog file here</h2>
-      <p>or click to browse &mdash; single file to analyze, or multiple to build history</p>
+    <div class="hero">
+      <img src="robot.avif" alt="Tempest Robot" class="hero-img" onerror="this.style.display='none'" />
+      <div class="hero-text">
+        <div class="hero-brand">
+          <div class="hero-logo">T</div>
+          <div>
+            <div class="hero-team">TEMPEST</div>
+            <div class="hero-team-sub">2026 Season</div>
+          </div>
+        </div>
+        <div class="hero-title">Log Dashboard</div>
+        <div class="hero-sub">Upload an AdvantageKit .wpilog to analyze power, performance, and match behavior. Team logs are automatically shared via the cloud.</div>
+      </div>
+    </div>
+    <div class="upload-zone" id="dropZone" style="max-width:1100px">
+      <h2 style="font-size:16px;margin-bottom:4px">Drop .wpilog file(s) here</h2>
+      <p style="font-size:13px">or click to browse &mdash; single file opens it, multiple build history</p>
       <p style="font-size:11px;margin-top:6px;color:var(--cyan)">&#9729; All uploads are shared with your team via the cloud</p>
       <input type="file" id="fileInput" accept=".wpilog" multiple />
     </div>
-    <div id="historyPreview" style="max-width:700px;margin:16px auto;display:none"></div>
+    <div id="historyPreview" style="max-width:1100px;margin:16px auto;display:none"></div>
   </div>
+  <div id="matchCorner" class="match-corner" style="display:none"></div>
   <div id="loading" class="loading" style="display:none">Parsing log file...</div>
   <div id="app" style="display:none"><div class="tab-bar" id="tabBar"></div><div id="tabPanels"></div></div>
 <script>
@@ -1401,59 +1494,157 @@ function computeBaseline(history) {
   return bl;
 }
 
+// ============== LOG FILENAME PARSER ==============
+// Extracts event/match info from filenames like:
+//   FRC_20240322_142310_CASJ_Q15.wpilog
+//   FRC_20240322_142310_CASJ_E3.wpilog
+//   akit_20240322_142310.wpilog
+//   Log_24-03-22_14-23-10.wpilog
+function parseLogName(filename) {
+  const base = (filename||'').replace(/\.wpilog$/i,'');
+  const out = { filename, base, displayName: base, shortLabel: base, event:null, matchType:null, matchNum:null, date:null, dateStr:'', timeStr:'' };
+
+  // Pattern: anything_YYYYMMDD_HHMMSS_EVENT_TYPENUM
+  let m = base.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})[_-](\d{2})[-_]?(\d{2})[-_]?(\d{2})(?:[_-]([A-Za-z0-9]+))?(?:[_-](QM|QF|SF|F|Q|E|P|EF|qm|qf|sf|f|q|e|p|ef)(\d+))?/);
+  if (m) {
+    try { out.date = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]); } catch(e) {}
+    if (m[7] && /^[A-Za-z]{2,8}$/.test(m[7]) && !['TBD','tbd'].includes(m[7])) out.event = m[7].toUpperCase();
+    if (m[8] && m[9]) {
+      const t = m[8].toUpperCase();
+      out.matchType = (t[0]==='Q')?'Q':(t[0]==='E'||t[0]==='S'||t[0]==='F')?'E':(t[0]==='P')?'P':t[0];
+      out.matchNum = +m[9];
+    }
+  }
+  // Fallback: search for "_Q15" or "Q15" or "E3" anywhere
+  if (!out.matchType) {
+    const mm = base.match(/(?:^|[_-])(Q|E|P|QM|QF|SF|F|EF)(\d+)(?:[_-]|$)/i);
+    if (mm) {
+      const t = mm[1].toUpperCase();
+      out.matchType = (t[0]==='Q')?'Q':(t[0]==='E'||t[0]==='S'||t[0]==='F')?'E':(t[0]==='P')?'P':t[0];
+      out.matchNum = +mm[2];
+    }
+  }
+  // Fallback: look for 4-5 letter event code
+  if (!out.event) {
+    const em = base.match(/[_-]([A-Z]{3,5})[_-]/);
+    if (em && !['FRC','TBD','AKIT','LOG'].includes(em[1])) out.event = em[1];
+  }
+  // Build display strings
+  if (out.date && !isNaN(out.date.getTime())) {
+    out.dateStr = out.date.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    out.timeStr = out.date.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+  }
+  const parts = [];
+  if (out.matchType && out.matchNum!=null) parts.push(`${out.matchType}${out.matchNum}`);
+  if (out.event) parts.push(out.event);
+  if (out.dateStr) parts.push(`${out.dateStr}${out.timeStr?' '+out.timeStr:''}`);
+  out.displayName = parts.length ? parts.join(' · ') : base;
+  out.shortLabel = (out.matchType && out.matchNum!=null) ? `${out.matchType}${out.matchNum}` : base.slice(0,14);
+  return out;
+}
+
 function showHistoryPreview() {
   const el = document.getElementById('historyPreview');
   const h = loadHistory();
-  if (!h.length && !(typeof sessionLogs!=='undefined'&&sessionLogs.size)) { el.style.display='none'; return; }
+  const cached = typeof sessionLogs !== 'undefined' ? sessionLogs : new Map();
+  if (!h.length && !cached.size) { el.style.display='none'; return; }
   el.style.display='block';
 
-  // Session logs section (clickable to re-open)
-  let sessionHTML = '';
-  if (typeof sessionLogs!=='undefined' && sessionLogs.size) {
-    sessionHTML = `<div style="margin-bottom:10px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Session logs (click to open):</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
-    for (const [fn] of sessionLogs) {
-      sessionHTML += `<button class="reset-zoom-btn" style="padding:5px 12px;font-size:11px" onclick="switchToLog('${fn.replace(/'/g,"\\'")}')">${fn.replace('.wpilog','')}</button>`;
-    }
-    sessionHTML += `</div></div>`;
-  }
+  // Merge: include session-only logs that aren't in history yet
+  const allMap = new Map();
+  for (const p of h) allMap.set(p.filename, p);
+  for (const [fn] of cached) if (!allMap.has(fn)) allMap.set(fn, { filename: fn, fromSession: true });
+  const all = [...allMap.values()];
 
-  if (!h.length) {
-    el.innerHTML = `<div class="chart-box" style="margin:0">${sessionHTML}</div>`;
-    return;
-  }
+  // Sort by parsed match (event asc, matchType Q before E, matchNum desc within group), fallback to most recent
+  all.forEach(p => { p._parsed = parseLogName(p.filename); });
+  all.sort((a,b) => {
+    const pa=a._parsed, pb=b._parsed;
+    const ta = (pa.date?pa.date.getTime():0);
+    const tb = (pb.date?pb.date.getTime():0);
+    if (ta && tb && ta!==tb) return tb - ta;
+    if (pa.matchNum!=null && pb.matchNum!=null) return pb.matchNum - pa.matchNum;
+    return 0;
+  });
 
-  const bl = computeBaseline(h);
-  // Build clickable match buttons: cloud/session logs are openable, others just text
-  const cached = typeof sessionLogs !== 'undefined' ? sessionLogs : new Map();
-  const matchButtons = h.map(p => {
+  const bl = h.length ? computeBaseline(h) : null;
+
+  const cards = all.map(p => {
+    const pr = p._parsed;
     const isSession = cached.has(p.filename);
     const isCloud = p.fromCloud || p.cloudFilename;
     const clickable = isSession || isCloud;
-    const shortName = p.filename.replace('.wpilog','');
-    const badge = isSession ? ' ●' : (isCloud ? ' ☁' : '');
-    const color = isSession ? 'var(--green)' : (isCloud ? 'var(--cyan)' : 'var(--text-muted)');
-    if (clickable) {
-      return `<button class="reset-zoom-btn" style="padding:5px 12px;font-size:11px;color:${color};border-color:${color}" onclick="switchToLog('${p.filename.replace(/'/g,"\\'")}')">${shortName}${badge}</button>`;
+    const typeCls = pr.matchType==='Q' ? 'q' : pr.matchType==='E' ? 'e' : pr.matchType==='P' ? 'p' : 'unk';
+    const typeLabel = pr.matchType || '—';
+    const numLabel = pr.matchNum!=null ? pr.matchNum : '—';
+    const srcCls = isSession ? 'session' : (isCloud ? 'cloud' : '');
+    const srcLabel = isSession ? '● loaded' : (isCloud ? '☁ cloud' : 'not loaded');
+
+    // Quick stats (only if we have profile data)
+    let statsHTML = '';
+    if (p.peakCurrent != null) {
+      const peak = p.peakCurrent, dur = p.duration, minV = p.minVoltage;
+      statsHTML = `<div class="mc-stats">${peak?`<span><b>${peak.toFixed(0)}A</b> peak</span>`:''}${dur?`<span><b>${dur.toFixed(0)}s</b></span>`:''}${minV?`<span><b>${minV.toFixed(1)}V</b></span>`:''}</div>`;
     }
-    return `<span style="padding:5px 10px;font-size:11px;color:var(--text-muted);opacity:0.6">${shortName}</span>`;
+
+    const escFn = p.filename.replace(/'/g,"\\'");
+    const onclick = clickable ? `onclick="switchToLog('${escFn}')"` : '';
+    const disabledCls = clickable ? '' : 'disabled';
+
+    return `
+      <div class="match-card ${disabledCls}" ${onclick} title="${p.filename}">
+        <div class="mc-top">
+          <div class="mc-badge ${typeCls}">${typeLabel}</div>
+          <div class="mc-source ${srcCls}">${srcLabel}</div>
+        </div>
+        <div class="mc-num">${numLabel}</div>
+        ${pr.event?`<div class="mc-event">${pr.event}</div>`:''}
+        ${pr.dateStr?`<div class="mc-date">${pr.dateStr}${pr.timeStr?' · '+pr.timeStr:''}</div>`:`<div class="mc-date" style="font-size:10px">${pr.base.slice(0,28)}</div>`}
+        ${statsHTML}
+      </div>`;
   }).join('');
 
+  const summaryHTML = bl ? `
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-bottom:12px">
+      <span>Avg peak: <b style="color:var(--text)">${bl.peakCurrent.avg.toFixed(1)}A</b></span>
+      <span>Avg current: <b style="color:var(--text)">${bl.avgCurrent.avg.toFixed(1)}A</b></span>
+      <span>Avg min V: <b style="color:var(--text)">${bl.minVoltage.avg.toFixed(2)}V</b></span>
+      <span>Avg duration: <b style="color:var(--text)">${bl.duration.avg.toFixed(0)}s</b></span>
+    </div>` : '';
+
   el.innerHTML = `
-    <div class="chart-box" style="margin:0">
-      ${sessionHTML}
-      <h3 style="margin-bottom:8px">Stored Profile: ${h.length} match${h.length>1?'es':''}</h3>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
-        Avg peak: ${bl.peakCurrent.avg.toFixed(1)}A &bull;
-        Avg current: ${bl.avgCurrent.avg.toFixed(1)}A &bull;
-        Avg min voltage: ${bl.minVoltage.avg.toFixed(2)}V &bull;
-        Avg duration: ${bl.duration.avg.toFixed(0)}s
+    <div class="chart-box" style="margin:0;padding:20px 24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px">
+        <h3 style="font-size:14px;color:var(--text);margin:0">Match History <span style="color:var(--text-muted);font-weight:400">&middot; ${all.length} log${all.length!==1?'s':''}</span></h3>
+        <div style="display:flex;gap:6px;align-items:center;font-size:10px;color:var(--text-muted)">
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(59,130,246,0.4);border-radius:2px;vertical-align:middle"></span> Q</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,0.4);border-radius:2px;vertical-align:middle"></span> Elim</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(249,115,22,0.4);border-radius:2px;vertical-align:middle"></span> Practice</span>
+          <button class="reset-zoom-btn" onclick="clearHistory();showHistoryPreview();" style="margin-left:8px">Clear</button>
+        </div>
       </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Click a match to open it (☁ = cloud, ● = loaded):</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${matchButtons}</div>
-      <div style="margin-top:10px">
-        <button class="reset-zoom-btn" onclick="clearHistory();showHistoryPreview();">Clear Local History</button>
-      </div>
+      ${summaryHTML}
+      <div class="match-grid">${cards}</div>
     </div>`;
+}
+
+function updateMatchCorner(filename) {
+  const el = document.getElementById('matchCorner');
+  if (!el) return;
+  if (!filename) { el.style.display = 'none'; return; }
+  const pr = parseLogName(filename);
+  const typeCls = pr.matchType==='Q' ? 'q' : pr.matchType==='E' ? 'e' : pr.matchType==='P' ? 'p' : 'unk';
+  const typeLabel = pr.matchType || '—';
+  const numLabel = pr.matchNum!=null ? pr.matchNum : '—';
+  const meta = [];
+  if (pr.event) meta.push(`<b>${pr.event}</b>`);
+  if (pr.dateStr) meta.push(`${pr.dateStr}${pr.timeStr?' '+pr.timeStr:''}`);
+  el.innerHTML = `
+    <div class="mcb-type ${typeCls}">${typeLabel}</div>
+    <div class="mcb-num">${numLabel}</div>
+    ${meta.length?`<div class="mcb-meta">${meta.join('<br>')}</div>`:''}
+  `;
+  el.style.display = 'flex';
 }
 
 function renderHistory(panel, currentProfile) {
@@ -1632,12 +1823,15 @@ function showHeaderControls(fileName) {
   uploadAnotherBtn.style.display='inline-block';
   backToUploadBtn.style.display='inline-block';
   headerMatchName.style.display='inline-block';
-  headerMatchName.textContent=fileName?fileName.replace('.wpilog',''):'';
+  const pr = fileName ? parseLogName(fileName) : null;
+  headerMatchName.textContent = pr ? pr.displayName : '';
+  updateMatchCorner(fileName);
 }
 function hideHeaderControls() {
   uploadAnotherBtn.style.display='none';
   backToUploadBtn.style.display='none';
   headerMatchName.style.display='none';
+  updateMatchCorner(null);
 }
 function backToUpload() {
   app.style.display='none';

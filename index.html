@@ -225,7 +225,6 @@
     <div><h1>Tempest Log Dashboard</h1><div class="subtitle">AdvantageKit .wpilog analyzer</div></div>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
       <span id="headerMatchName" style="font-size:12px;color:var(--text-muted);display:none"></span>
-      <button id="tbaKeyBtn" class="reset-zoom-btn" style="padding:6px 12px;font-size:11px" onclick="promptTBAKey()" title="Set Blue Alliance API key for match video embeds">TBA Key</button>
       <button id="uploadAnotherBtn" class="reset-zoom-btn" style="display:none;padding:6px 14px;font-size:12px" onclick="document.getElementById('fileInput2').click()">+ Upload Log</button>
       <button id="backToUploadBtn" class="reset-zoom-btn" style="display:none;padding:6px 14px;font-size:12px" onclick="backToUpload()">Back</button>
       <input type="file" id="fileInput2" accept=".wpilog" multiple style="display:none" />
@@ -630,42 +629,40 @@ function renderPower(panel, P, toSec, fileName) {
   if (pr && pr.event && pr.matchNum!=null && pr.matchType!=='P' && tbaEl) {
     const ev = getEventInfo(pr.event);
     const year = pr.date ? pr.date.getFullYear() : new Date().getFullYear();
-    const hasKey = !!getTBAKey();
     tbaEl.innerHTML = `
       <div class="chart-box" style="margin:10px 0;padding:14px 16px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="font-size:16px">📺</span>
           <strong style="font-size:13px">Match Video</strong>
           <span style="font-size:11px;color:var(--text-muted)">${ev.name} · ${pr.matchType==='Q'?'Qualification':'Elimination'} ${pr.matchNum}</span>
-          <span style="margin-left:auto;font-size:11px;color:var(--text-muted)" id="tba-status">${hasKey?'Fetching from Blue Alliance…':''}</span>
+          <span style="margin-left:auto;font-size:11px;color:var(--text-muted)" id="tba-status">Fetching from Blue Alliance…</span>
         </div>
-        <div id="tba-video-slot">${hasKey?'':'<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:12px;border:1px dashed var(--border);border-radius:6px">Set a Blue Alliance API key (top-right <strong>TBA Key</strong> button) to embed match videos here.</div>'}</div>
+        <div id="tba-video-slot"></div>
       </div>`;
-    if (hasKey) {
-      fetchTBAMatchVideo(pr).then(result => {
-        const slot = panel.querySelector('#tba-video-slot');
-        const status = panel.querySelector('#tba-status');
-        if (!slot) return;
-        if (result && result.ytId) {
-          slot.innerHTML = `
-            <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;background:#000">
-              <iframe src="https://www.youtube.com/embed/${result.ytId}" frameborder="0" allowfullscreen
-                style="position:absolute;top:0;left:0;width:100%;height:100%" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"></iframe>
-            </div>
-            <div style="margin-top:6px;font-size:11px;color:var(--text-muted)"><a href="${result.matchUrl}" target="_blank" style="color:var(--cyan)">Open on The Blue Alliance ↗</a></div>`;
-          if (status) status.textContent = '';
-        } else if (result && result.error === 'no_video') {
-          slot.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Match found on TBA but no video is posted yet. <a href="${result.matchUrl}" target="_blank" style="color:var(--cyan)">Open on The Blue Alliance ↗</a></div>`;
-          if (status) status.textContent = '';
-        } else {
-          slot.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Couldn't find this match on The Blue Alliance (event key: <code>${year}${ev.tbaKey}</code>). If the code is wrong, edit <code>EVENT_INFO</code> in the source.</div>`;
-          if (status) status.textContent = '';
-        }
-      }).catch(err => {
-        const slot = panel.querySelector('#tba-video-slot');
-        if (slot) slot.innerHTML = `<div style="padding:20px;color:var(--red);font-size:12px">TBA request failed: ${err.message||err}</div>`;
-      });
-    }
+    fetchTBAMatchVideo(pr).then(result => {
+      const slot = panel.querySelector('#tba-video-slot');
+      const status = panel.querySelector('#tba-status');
+      if (!slot) return;
+      if (result && result.ytId) {
+        slot.innerHTML = `
+          <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;background:#000">
+            <iframe src="https://www.youtube.com/embed/${result.ytId}" frameborder="0" allowfullscreen
+              style="position:absolute;top:0;left:0;width:100%;height:100%" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"></iframe>
+          </div>
+          <div style="margin-top:6px;font-size:11px;color:var(--text-muted)"><a href="${result.matchUrl}" target="_blank" style="color:var(--cyan)">Open on The Blue Alliance ↗</a></div>`;
+        if (status) status.textContent = '';
+      } else if (result && result.error === 'no_video') {
+        slot.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Match found on TBA but no video is posted yet. <a href="${result.matchUrl}" target="_blank" style="color:var(--cyan)">Open on The Blue Alliance ↗</a></div>`;
+        if (status) status.textContent = '';
+      } else {
+        const tried = (ev.tbaKeys||[pr.event.toLowerCase()]).map(k=>`${year}${k}`).join(', ');
+        slot.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Couldn't find this match on The Blue Alliance. Tried event keys: <code>${tried}</code>. If none are right, edit <code>EVENT_INFO['${pr.event}'].tbaKeys</code> in the source.</div>`;
+        if (status) status.textContent = '';
+      }
+    }).catch(err => {
+      const slot = panel.querySelector('#tba-video-slot');
+      if (slot) slot.innerHTML = `<div style="padding:20px;color:var(--red);font-size:12px">TBA request failed: ${err.message||err}</div>`;
+    });
   }
 
   const cd=dsMax(cT,cV,MAX_PTS);
@@ -1610,109 +1607,105 @@ function computeBaseline(history) {
 }
 
 // ============== EVENT NAMES / TBA CONFIG ==============
-// Map short event codes (from filenames) to human names + TBA event keys.
-// Add more entries as the team attends more events.
+// Hardcoded TBA read-only key (safe to be public per TBA policy).
+const TBA_API_KEY = '72DB6h7LR6Blr7ikUCVFm5Bp1Mv9zEl5Xv9fU9UzSF4ioqX8drX3SPCB5u8XSzbJ';
+function getTBAKey() { return TBA_API_KEY; }
+
+// Map short event codes (from filenames) to human names + candidate TBA event keys.
+// Multiple tbaKeys are tried in order (useful when FMS code differs from TBA code).
 const EVENT_INFO = {
-  'NYN2': {name: 'Gotham Regional', tbaKey: 'nyny'},  // Gotham City Regional @ NYC
-  // Add more: 'XXXX': {name: 'Event Name', tbaKey: 'tbacode'}
+  'NYN2': {name: 'Gotham Regional', tbaKeys: ['nyn2','nyny','nynyc','gotham']},
+  // Add more: 'XXXX': {name: 'Event Name', tbaKeys: ['tbacode']}
 };
 function getEventInfo(code) {
   if (!code) return null;
   const up = code.toUpperCase();
   if (EVENT_INFO[up]) return EVENT_INFO[up];
-  // Fallback: use the code itself
-  return { name: up + ' Regional', tbaKey: up.toLowerCase() };
-}
-
-// TBA API key — read-only, set by user via localStorage. Needed for match video embeds.
-function getTBAKey() { try { return localStorage.getItem('tba_api_key') || ''; } catch { return ''; } }
-function promptTBAKey() {
-  const cur = getTBAKey();
-  const k = prompt('Enter your Blue Alliance API read key\n(Get one free at https://www.thebluealliance.com/account)\n\nLeave blank to disable match videos.', cur);
-  if (k === null) return;
-  try { localStorage.setItem('tba_api_key', k.trim()); } catch {}
-  alert(k.trim() ? 'TBA key saved. Match videos will appear on Power tab when available.' : 'TBA key cleared.');
-}
-
-// Build TBA match key from parsed log name
-// match types: Q→qm, E→sf/f/ef (TBA distinguishes), P→no TBA
-function buildTBAMatchKey(pr, year) {
-  if (!pr || !pr.event || pr.matchNum==null) return null;
-  const ev = getEventInfo(pr.event); if (!ev) return null;
-  const yr = year || (pr.date ? pr.date.getFullYear() : new Date().getFullYear());
-  let typePrefix;
-  if (pr.matchType==='Q') typePrefix = 'qm';
-  else if (pr.matchType==='E') typePrefix = 'sf'; // try semifinal first (user may need to adjust)
-  else return null;
-  return `${yr}${ev.tbaKey}_${typePrefix}${pr.matchNum}`;
+  return { name: up + ' Regional', tbaKeys: [up.toLowerCase()] };
 }
 
 async function fetchTBAMatchVideo(pr) {
-  const key = getTBAKey();
-  if (!key) return { error: 'no_key' };
+  if (!pr || !pr.event || pr.matchNum==null) return { error: 'no_event' };
   const year = pr.date ? pr.date.getFullYear() : new Date().getFullYear();
-  const ev = getEventInfo(pr.event); if (!ev) return { error: 'no_event' };
+  const ev = getEventInfo(pr.event);
+  const eventKeys = [...(ev.tbaKeys||[pr.event.toLowerCase()])];
 
-  // For elims we try multiple match-type prefixes
   const typePrefixes = pr.matchType==='Q' ? ['qm']
     : pr.matchType==='E' ? ['sf','f','ef','qf']
     : [];
   if (!typePrefixes.length) return { error: 'not_official' };
 
-  for (const tp of typePrefixes) {
-    const mk = `${year}${ev.tbaKey}_${tp}${pr.matchNum}`;
-    try {
-      const res = await fetch(`https://www.thebluealliance.com/api/v3/match/${mk}`, { headers: { 'X-TBA-Auth-Key': key } });
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data && Array.isArray(data.videos) && data.videos.length) {
-        const yt = data.videos.find(v => v.type === 'youtube');
-        if (yt) return { matchKey: mk, ytId: yt.key, matchUrl: `https://www.thebluealliance.com/match/${mk}` };
-      }
-      // Found the match but no video
-      return { matchKey: mk, ytId: null, matchUrl: `https://www.thebluealliance.com/match/${mk}`, error: 'no_video' };
-    } catch (e) { /* try next */ }
+  let matchedUrl = null;
+  for (const ek of eventKeys) {
+    for (const tp of typePrefixes) {
+      const mk = `${year}${ek}_${tp}${pr.matchNum}`;
+      try {
+        const res = await fetch(`https://www.thebluealliance.com/api/v3/match/${mk}`, { headers: { 'X-TBA-Auth-Key': TBA_API_KEY } });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data && data.key) {
+          matchedUrl = `https://www.thebluealliance.com/match/${mk}`;
+          if (Array.isArray(data.videos) && data.videos.length) {
+            const yt = data.videos.find(v => v.type === 'youtube');
+            if (yt) return { matchKey: mk, ytId: yt.key, matchUrl: matchedUrl };
+          }
+        }
+      } catch (e) { /* try next */ }
+    }
   }
+  if (matchedUrl) return { ytId: null, matchUrl: matchedUrl, error: 'no_video' };
   return { error: 'not_found' };
 }
 
 // ============== LOG FILENAME PARSER ==============
 // Extracts event/match info from filenames like:
-//   FRC_20240322_142310_CASJ_Q15.wpilog
-//   FRC_20240322_142310_CASJ_E3.wpilog
-//   akit_20240322_142310.wpilog
+//   FRC_20260315_143025_NYN2_Q15.wpilog
+//   FRC_20260315_143025_NYN2_E3.wpilog
+//   akit_20240322_142310.wpilog (no match info = lab log)
 //   Log_24-03-22_14-23-10.wpilog
+// Works by extracting date, match ident, and event token independently so failure
+// in one doesn't break the others.
 function parseLogName(filename) {
   const base = (filename||'').replace(/\.wpilog$/i,'');
   const out = { filename, base, displayName: base, shortLabel: base, event:null, matchType:null, matchNum:null, date:null, dateStr:'', timeStr:'' };
 
-  // Pattern: anything_YYYYMMDD_HHMMSS_EVENT_TYPENUM
-  let m = base.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})[_-](\d{2})[-_]?(\d{2})[-_]?(\d{2})(?:[_-]([A-Za-z0-9]+))?(?:[_-](QM|QF|SF|F|Q|E|P|EF|qm|qf|sf|f|q|e|p|ef)(\d+))?/);
-  if (m) {
-    try { out.date = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]); } catch(e) {}
-    if (m[7] && /^[A-Za-z]{2,8}$/.test(m[7]) && !['TBD','tbd'].includes(m[7])) out.event = m[7].toUpperCase();
-    if (m[8] && m[9]) {
-      const t = m[8].toUpperCase();
-      out.matchType = (t[0]==='Q')?'Q':(t[0]==='E'||t[0]==='S'||t[0]==='F')?'E':(t[0]==='P')?'P':t[0];
-      out.matchNum = +m[9];
-    }
+  // 1. Date + time (YYYYMMDD + HHMMSS with optional separators)
+  const dtm = base.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})[_-](\d{2})[-_]?(\d{2})[-_]?(\d{2})/);
+  if (dtm) {
+    const d = new Date(+dtm[1], +dtm[2]-1, +dtm[3], +dtm[4], +dtm[5], +dtm[6]);
+    if (!isNaN(d.getTime())) out.date = d;
   }
-  // Fallback: search for "_Q15" or "Q15" or "E3" anywhere
-  if (!out.matchType) {
-    const mm = base.match(/(?:^|[_-])(Q|E|P|QM|QF|SF|F|EF)(\d+)(?:[_-]|$)/i);
-    if (mm) {
-      const t = mm[1].toUpperCase();
-      out.matchType = (t[0]==='Q')?'Q':(t[0]==='E'||t[0]==='S'||t[0]==='F')?'E':(t[0]==='P')?'P':t[0];
-      out.matchNum = +mm[2];
-    }
+
+  // 2. Match ident: Q15, E3, QM7, SF2, F1, EF3, etc. (with optional separator between letter and number)
+  const mm = base.match(/(?:^|[_-])(QM|QF|SF|EF|[QEPF])[_-]?(\d+)(?:[_\-R]|\.|$)/i);
+  if (mm) {
+    const t = mm[1].toUpperCase();
+    out.matchType = (t==='Q'||t==='QM') ? 'Q'
+      : (t==='QF'||t==='SF'||t==='F'||t==='EF'||t==='E') ? 'E'
+      : (t==='P') ? 'P' : null;
+    out.matchNum = +mm[2];
   }
-  // Fallback: look for 4-5 letter event code
-  if (!out.event) {
-    const em = base.match(/[_-]([A-Z]{3,5})[_-]/);
-    if (em && !['FRC','TBD','AKIT','LOG'].includes(em[1])) out.event = em[1];
+
+  // 3. Event code: token that is alphanumeric, 3–10 chars, contains at least one letter,
+  // is not FRC/TBD/AKIT/LOG, and is not a match ident or pure date/time.
+  const tokens = base.split(/[_-]/).filter(t=>t.length);
+  const EXCLUDE = new Set(['FRC','TBD','AKIT','LOG','WPILOG','EVENT','RECORDING','MATCH']);
+  for (const tok of tokens) {
+    const up = tok.toUpperCase();
+    if (up.length < 3 || up.length > 10) continue;
+    if (EXCLUDE.has(up)) continue;
+    if (/^\d+$/.test(up)) continue;                       // all digits
+    if (/^(QM|QF|SF|EF|[QEPF])\d+$/.test(up)) continue;   // match ident like Q15
+    if (!/[A-Z]/.test(up)) continue;                      // must contain at least one letter
+    // require majority letters so things like "42abc" don't count, but accept NYN2 (3 letters + 1 digit)
+    const letters = (up.match(/[A-Z]/g)||[]).length;
+    if (letters < 2) continue;
+    out.event = up;
+    break;
   }
-  // Build display strings
-  if (out.date && !isNaN(out.date.getTime())) {
+
+  // 4. Build display strings
+  if (out.date) {
     out.dateStr = out.date.toLocaleDateString('en-US',{month:'short',day:'numeric'});
     out.timeStr = out.date.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
   }

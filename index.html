@@ -1549,6 +1549,7 @@ function extractProfile(P, toSec, filename) {
   return {
     filename: filename || 'unknown',
     date: new Date().toISOString(),
+    _v: 2, // schema version: bump when extractProfile output changes. UI only trusts error counts at v>=2
     peakCurrent, avgCurrent, duration, minVoltage, avgVoltage, timeAbove120: t120,
     breakerRisk: worstRisk,
     worstExcursion: worstExc ? {duration: worstExc.duration, peakCurrent: worstExc.peakCurrent, avgCurrent: worstExc.avgCurrent, startTime: worstExc.startTime} : null,
@@ -1786,8 +1787,11 @@ function showHistoryPreview() {
       statsHTML = `<div class="mc-stats">${peak?`<span><b>${peak.toFixed(0)}A</b> peak</span>`:''}${dur?`<span><b>${dur.toFixed(0)}s</b></span>`:''}${minV?`<span><b>${minV.toFixed(1)}V</b></span>`:''}</div>`;
     }
 
-    const errCount = p.errorCount || 0;
-    const warnCount = p.warningCount || 0;
+    // Only trust error counts from profiles extracted under current schema (v2+).
+    // Older cached profiles scanned console text for "Error"/"Exception" strings and are unreliable.
+    const countsReliable = (p._v || 0) >= 2;
+    const errCount = countsReliable ? (p.errorCount || 0) : 0;
+    const warnCount = countsReliable ? (p.warningCount || 0) : 0;
     const hasError = errCount > 0;
     const alertHTML = hasError
       ? `<div class="mc-alert" title="${errCount} Alert error${errCount>1?'s':''}${warnCount?' · '+warnCount+' warning'+(warnCount>1?'s':''):''}">${errCount} error${errCount>1?'s':''}</div>`
@@ -1831,7 +1835,7 @@ function showHistoryPreview() {
 
   const groupsHTML = groupList.map(grp => {
     const cardHTML = grp.entries.map(renderCard).join('');
-    const errTotal = grp.entries.reduce((s,p)=>s+(p.errorCount||0),0);
+    const errTotal = grp.entries.reduce((s,p)=>s+(((p._v||0)>=2?(p.errorCount||0):0)),0);
     const headerColor = grp.isLab ? 'var(--text-muted)' : '#60a5fa';
     const headerIcon = grp.isLab ? '🔧' : '🏆';
     return `

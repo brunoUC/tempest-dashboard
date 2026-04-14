@@ -8,9 +8,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-storage-compat.js"></script>
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+    import { getStorage, ref, uploadBytes, getBytes, listAll } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
     const firebaseConfig = {
       apiKey: "AIzaSyA_qgdzWfPxX4yn4FkwQGhekkIzgNQRwPU",
       authDomain: "tempest-dashboard-45a1e.firebaseapp.com",
@@ -20,8 +20,10 @@
       appId: "1:52754907843:web:8997cefa7d39fd7c54d876",
       measurementId: "G-MT140L7WSE"
     };
-    firebase.initializeApp(firebaseConfig);
-    window.cloudStorage = firebase.storage();
+    const app = initializeApp(firebaseConfig);
+    const storage = getStorage(app);
+    window.cloudSDK = { storage, ref, uploadBytes, getBytes, listAll };
+    window.dispatchEvent(new Event('firebaseReady'));
   </script>
   <style>
     :root {
@@ -1067,15 +1069,27 @@ const MECHANISMS = [
 const HISTORY_KEY = 'tempest_match_history';
 
 // ============== CLOUD STORAGE (Firebase) ==============
-// Uploads .wpilog + profile JSON to Firebase Storage so the whole team can see them
+// Uses modular Firebase SDK via window.cloudSDK — uploadBytes/getBytes work without CORS config
+// because they go through Firebase's authenticated endpoint instead of direct GCS URLs
+
+async function waitForFirebase() {
+  if (window.cloudSDK) return true;
+  return new Promise(resolve => {
+    window.addEventListener('firebaseReady', () => resolve(true), {once: true});
+    setTimeout(() => resolve(!!window.cloudSDK), 3000);
+  });
+}
+
 async function uploadToCloud(file, profile) {
-  if (!window.cloudStorage) return false;
+  await waitForFirebase();
+  if (!window.cloudSDK) return false;
   try {
-    const logRef = cloudStorage.ref('logs/' + file.name);
-    const profRef = cloudStorage.ref('profiles/' + file.name + '.json');
-    await logRef.put(file, {contentType: 'application/octet-stream'});
+    const { storage, ref, uploadBytes } = window.cloudSDK;
+    const logRef = ref(storage, 'logs/' + file.name);
+    const profRef = ref(storage, 'profiles/' + file.name + '.json');
+    await uploadBytes(logRef, file, {contentType: 'application/octet-stream'});
     const profileBlob = new Blob([JSON.stringify(profile)], {type: 'application/json'});
-    await profRef.put(profileBlob, {contentType: 'application/json'});
+    await uploadBytes(profRef, profileBlob, {contentType: 'application/json'});
     return true;
   } catch (err) {
     console.warn('Cloud upload failed:', err);
@@ -1084,18 +1098,20 @@ async function uploadToCloud(file, profile) {
 }
 
 async function listCloudLogs() {
-  if (!window.cloudStorage) return [];
+  await waitForFirebase();
+  if (!window.cloudSDK) return [];
   try {
-    const profRef = cloudStorage.ref('profiles');
-    const result = await profRef.listAll();
+    const { storage, ref, listAll, getBytes } = window.cloudSDK;
+    const profRef = ref(storage, 'profiles');
+    const result = await listAll(profRef);
     const profiles = await Promise.all(result.items.map(async item => {
       try {
-        const url = await item.getDownloadURL();
-        const resp = await fetch(url);
-        const profile = await resp.json();
+        const bytes = await getBytes(item);
+        const text = new TextDecoder().decode(bytes);
+        const profile = JSON.parse(text);
         profile.cloudFilename = item.name.replace(/\.json$/, '');
         return profile;
-      } catch { return null; }
+      } catch (err) { console.warn('Failed to fetch profile', item.name, err); return null; }
     }));
     return profiles.filter(p => p !== null);
   } catch (err) {
@@ -1105,12 +1121,12 @@ async function listCloudLogs() {
 }
 
 async function downloadCloudLog(filename) {
-  if (!window.cloudStorage) return null;
+  await waitForFirebase();
+  if (!window.cloudSDK) return null;
   try {
-    const logRef = cloudStorage.ref('logs/' + filename);
-    const url = await logRef.getDownloadURL();
-    const resp = await fetch(url);
-    return await resp.arrayBuffer();
+    const { storage, ref, getBytes } = window.cloudSDK;
+    const logRef = ref(storage, 'logs/' + filename);
+    return await getBytes(logRef);
   } catch (err) {
     console.warn('Cloud download failed:', err);
     return null;

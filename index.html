@@ -1295,6 +1295,21 @@ function showHistoryPreview() {
   }
 
   const bl = computeBaseline(h);
+  // Build clickable match buttons: cloud/session logs are openable, others just text
+  const cached = typeof sessionLogs !== 'undefined' ? sessionLogs : new Map();
+  const matchButtons = h.map(p => {
+    const isSession = cached.has(p.filename);
+    const isCloud = p.fromCloud || p.cloudFilename;
+    const clickable = isSession || isCloud;
+    const shortName = p.filename.replace('.wpilog','');
+    const badge = isSession ? ' ●' : (isCloud ? ' ☁' : '');
+    const color = isSession ? 'var(--green)' : (isCloud ? 'var(--cyan)' : 'var(--text-muted)');
+    if (clickable) {
+      return `<button class="reset-zoom-btn" style="padding:5px 12px;font-size:11px;color:${color};border-color:${color}" onclick="switchToLog('${p.filename.replace(/'/g,"\\'")}')">${shortName}${badge}</button>`;
+    }
+    return `<span style="padding:5px 10px;font-size:11px;color:var(--text-muted);opacity:0.6">${shortName}</span>`;
+  }).join('');
+
   el.innerHTML = `
     <div class="chart-box" style="margin:0">
       ${sessionHTML}
@@ -1305,11 +1320,10 @@ function showHistoryPreview() {
         Avg min voltage: ${bl.minVoltage.avg.toFixed(2)}V &bull;
         Avg duration: ${bl.duration.avg.toFixed(0)}s
       </div>
-      <div style="font-size:11px;color:var(--text-muted)">
-        Matches: ${h.map(p=>p.filename.replace('.wpilog','')).join(', ')}
-      </div>
-      <div style="margin-top:8px">
-        <button class="reset-zoom-btn" onclick="clearHistory();showHistoryPreview();">Clear History</button>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Click a match to open it (☁ = cloud, ● = loaded):</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${matchButtons}</div>
+      <div style="margin-top:10px">
+        <button class="reset-zoom-btn" onclick="clearHistory();showHistoryPreview();">Clear Local History</button>
       </div>
     </div>`;
 }

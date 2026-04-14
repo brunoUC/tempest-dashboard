@@ -1085,10 +1085,30 @@ function extractProfile(P, toSec, filename) {
     }
   }
 
+  // Breaker trip-margin analysis: classify each excursion vs CB285 trip band
+  const excs = findExcursions(cT, cV);
+  let worstRisk = 'safe'; // safe < below_band < in_band < tripped
+  let worstExc = null;
+  const rankOf = {safe:0, below_band:1, in_band:2, tripped:3};
+  for (const e of excs) {
+    const lo = getTripTime(e.peakCurrent, 'lower');
+    const hi = getTripTime(e.peakCurrent, 'upper');
+    let risk = 'safe';
+    if (e.peakCurrent <= CB285_RATED) risk = 'safe';
+    else if (e.duration >= hi) risk = 'tripped';
+    else if (e.duration >= lo) risk = 'in_band';
+    else risk = 'below_band';
+    if (rankOf[risk] > rankOf[worstRisk]) { worstRisk = risk; worstExc = e; }
+  }
+  const excursionCount = excs.length;
+
   return {
     filename: filename || 'unknown',
     date: new Date().toISOString(),
     peakCurrent, avgCurrent, duration, minVoltage, avgVoltage, timeAbove120: t120,
+    breakerRisk: worstRisk,
+    worstExcursion: worstExc ? {duration: worstExc.duration, peakCurrent: worstExc.peakCurrent, avgCurrent: worstExc.avgCurrent, startTime: worstExc.startTime} : null,
+    excursionCount,
     motors
   };
 }
@@ -1235,9 +1255,27 @@ function renderHistory(panel, currentProfile) {
 
   // All matches table
   const cachedNames = typeof sessionLogs!=='undefined' ? sessionLogs : new Map();
+  // Breaker risk label/color map
+  const riskMeta = {
+    safe:        {label:'Safe',         color:'var(--green)',  bg:'rgba(34,197,94,0.15)',   title:'No excursions exceeded breaker margin'},
+    below_band:  {label:'Below Band',   color:'var(--yellow)', bg:'rgba(234,179,8,0.15)',   title:'Excursion exceeded 135% but duration was below the trip band'},
+    in_band:     {label:'In Trip Band', color:'var(--orange)', bg:'rgba(249,115,22,0.18)',  title:'An excursion fell within the CB285 trip band — breaker may trip'},
+    tripped:     {label:'Would Trip',   color:'var(--red)',    bg:'rgba(239,68,68,0.20)',   title:'An excursion exceeded the upper trip curve — breaker expected to trip'},
+  };
+  function riskCell(m) {
+    const risk = m.breakerRisk || 'safe';
+    const meta = riskMeta[risk] || riskMeta.safe;
+    let detail = '';
+    if (m.worstExcursion) {
+      const w = m.worstExcursion;
+      detail = `<div style="font-size:9px;color:var(--text-muted);margin-top:2px">${w.peakCurrent.toFixed(0)}A for ${w.duration.toFixed(1)}s</div>`;
+    }
+    return `<span class="alert-type" style="background:${meta.bg};color:${meta.color}" title="${meta.title}">${meta.label}</span>${detail}`;
+  }
+
   let matchesHTML = `<div class="section-title">All Stored Matches (${history.length})</div>
     <div class="chart-box"><table class="data-table">
-      <thead><tr><th>File</th><th>Date</th><th>Duration</th><th>Peak I</th><th>Avg I</th><th>Min V</th><th>Time &gt;120A</th><th></th></tr></thead><tbody>`;
+      <thead><tr><th>File</th><th>Date</th><th>Duration</th><th>Peak I</th><th>Avg I</th><th>Min V</th><th>Time &gt;120A</th><th>Breaker Margin</th><th></th></tr></thead><tbody>`;
   for (const m of history) {
     const isCurrent = currentProfile && m.filename === currentProfile.filename;
     const isCached = cachedNames.has(m.filename);
@@ -1251,6 +1289,7 @@ function renderHistory(panel, currentProfile) {
       <td>${m.avgCurrent.toFixed(1)}A</td>
       <td>${m.minVoltage.toFixed(2)}V</td>
       <td>${m.timeAbove120.toFixed(1)}s</td>
+      <td>${riskCell(m)}</td>
       <td>${isCurrent?'<span style="color:var(--accent);font-size:10px">&#9654; VIEWING</span>' : (isCached?'<span style="color:var(--text-muted);font-size:10px;cursor:pointer">switch &#8594;</span>':'<span style="color:var(--text-muted);font-size:9px;opacity:0.5">not loaded</span>')}</td></tr>`;
   }
   matchesHTML += '</tbody></table>';

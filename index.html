@@ -154,13 +154,22 @@
     .match-card .mc-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
     .match-card .mc-badge {
       display:inline-flex; align-items:center; justify-content:center;
-      min-width: 28px; height: 22px; padding: 0 8px; border-radius: 4px;
-      font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+      height: 22px; padding: 0 9px; border-radius: 4px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap;
     }
     .match-card .mc-badge.q { background: rgba(59,130,246,0.18); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
     .match-card .mc-badge.e { background: rgba(239,68,68,0.18); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
     .match-card .mc-badge.p { background: rgba(249,115,22,0.18); color: #fb923c; border: 1px solid rgba(249,115,22,0.4); }
     .match-card .mc-badge.unk { background: rgba(156,163,175,0.15); color: var(--text-muted); border: 1px solid var(--border); }
+    .match-card .mc-alert {
+      display:inline-flex; align-items:center; gap:4px;
+      background: rgba(239,68,68,0.18); color: #f87171; border: 1px solid rgba(239,68,68,0.5);
+      border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+      margin-top: 6px; align-self: flex-start;
+    }
+    .match-card .mc-alert::before { content: '⚠'; font-size: 11px; }
+    .match-card.has-error { border-color: rgba(239,68,68,0.45); box-shadow: inset 3px 0 0 var(--red); }
+    .match-card.has-error:hover { border-color: var(--red); }
     .match-card .mc-source { font-size: 10px; color: var(--text-muted); }
     .match-card .mc-source.session { color: var(--green); }
     .match-card .mc-source.cloud { color: var(--cyan); }
@@ -1435,6 +1444,49 @@ function extractProfile(P, toSec, filename) {
   }
   const excursionCount = excs.length;
 
+  // ---- Error / warning counts from Alerts & Console ----
+  const alertSources = [
+    ['/RealOutputs/Alerts/errors','error'],
+    ['/RealOutputs/Alerts/warnings','warning'],
+    ['/RealOutputs/PhotonAlerts/errors','error'],
+    ['/RealOutputs/PhotonAlerts/warnings','warning'],
+    ['/RealOutputs/PathPlanner/errors','error'],
+    ['/RealOutputs/PathPlanner/warnings','warning'],
+  ];
+  const seenErr = new Set(), seenWarn = new Set();
+  for (const [path,kind] of alertSources) {
+    const e = P.get(path);
+    if (!e || !e.data.length) continue;
+    for (const r of e.data) {
+      const msgs = Array.isArray(r.value) ? r.value : [];
+      for (const m of msgs) {
+        if (!m) continue;
+        const key = path + '|' + m;
+        if (kind==='error') seenErr.add(key); else seenWarn.add(key);
+      }
+    }
+  }
+  // Also scan console text for Error/Exception lines
+  const consoleEntry = P.get('/RealOutputs/Console');
+  let loopOverruns = 0, consoleErrorLines = 0;
+  if (consoleEntry && consoleEntry.data.length) {
+    let prevVal = '';
+    for (const r of consoleEntry.data) {
+      if (r.value && r.value !== prevVal) {
+        const text = r.value;
+        if (/loop overrun|Loop time of/i.test(text)) loopOverruns++;
+        // Count lines that look like errors/exceptions
+        const lines = text.split('\n');
+        for (const line of lines) {
+          if (/\b(Error|ERROR|Exception|CRITICAL|Caused by)\b/.test(line) && !/^\s*Warning/i.test(line)) consoleErrorLines++;
+        }
+        prevVal = r.value;
+      }
+    }
+  }
+  const errorCount = seenErr.size + consoleErrorLines;
+  const warningCount = seenWarn.size;
+
   return {
     filename: filename || 'unknown',
     date: new Date().toISOString(),
@@ -1442,6 +1494,7 @@ function extractProfile(P, toSec, filename) {
     breakerRisk: worstRisk,
     worstExcursion: worstExc ? {duration: worstExc.duration, peakCurrent: worstExc.peakCurrent, avgCurrent: worstExc.avgCurrent, startTime: worstExc.startTime} : null,
     excursionCount,
+    errorCount, warningCount, loopOverruns,
     motors
   };
 }
@@ -1569,13 +1622,14 @@ function showHistoryPreview() {
 
   const bl = h.length ? computeBaseline(h) : null;
 
+  const TYPE_FULL = {'Q':'Qualification','E':'Elimination','P':'Practice'};
   const cards = all.map(p => {
     const pr = p._parsed;
     const isSession = cached.has(p.filename);
     const isCloud = p.fromCloud || p.cloudFilename;
     const clickable = isSession || isCloud;
     const typeCls = pr.matchType==='Q' ? 'q' : pr.matchType==='E' ? 'e' : pr.matchType==='P' ? 'p' : 'unk';
-    const typeLabel = pr.matchType || '—';
+    const typeLabel = TYPE_FULL[pr.matchType] || 'Unknown';
     const numLabel = pr.matchNum!=null ? pr.matchNum : '—';
     const srcCls = isSession ? 'session' : (isCloud ? 'cloud' : '');
     const srcLabel = isSession ? '● loaded' : (isCloud ? '☁ cloud' : 'not loaded');
@@ -1587,12 +1641,21 @@ function showHistoryPreview() {
       statsHTML = `<div class="mc-stats">${peak?`<span><b>${peak.toFixed(0)}A</b> peak</span>`:''}${dur?`<span><b>${dur.toFixed(0)}s</b></span>`:''}${minV?`<span><b>${minV.toFixed(1)}V</b></span>`:''}</div>`;
     }
 
+    // Error alert
+    const errCount = p.errorCount || 0;
+    const warnCount = p.warningCount || 0;
+    const hasError = errCount > 0;
+    const alertHTML = hasError
+      ? `<div class="mc-alert" title="${errCount} error${errCount>1?'s':''}${warnCount?' · '+warnCount+' warning'+(warnCount>1?'s':''):''} in console">${errCount} error${errCount>1?'s':''}</div>`
+      : '';
+
     const escFn = p.filename.replace(/'/g,"\\'");
     const onclick = clickable ? `onclick="switchToLog('${escFn}')"` : '';
     const disabledCls = clickable ? '' : 'disabled';
+    const errCls = hasError ? 'has-error' : '';
 
     return `
-      <div class="match-card ${disabledCls}" ${onclick} title="${p.filename}">
+      <div class="match-card ${disabledCls} ${errCls}" ${onclick} title="${p.filename}">
         <div class="mc-top">
           <div class="mc-badge ${typeCls}">${typeLabel}</div>
           <div class="mc-source ${srcCls}">${srcLabel}</div>
@@ -1600,6 +1663,7 @@ function showHistoryPreview() {
         <div class="mc-num">${numLabel}</div>
         ${pr.event?`<div class="mc-event">${pr.event}</div>`:''}
         ${pr.dateStr?`<div class="mc-date">${pr.dateStr}${pr.timeStr?' · '+pr.timeStr:''}</div>`:`<div class="mc-date" style="font-size:10px">${pr.base.slice(0,28)}</div>`}
+        ${alertHTML}
         ${statsHTML}
       </div>`;
   }).join('');
@@ -1616,10 +1680,11 @@ function showHistoryPreview() {
     <div class="chart-box" style="margin:0;padding:20px 24px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px">
         <h3 style="font-size:14px;color:var(--text);margin:0">Match History <span style="color:var(--text-muted);font-weight:400">&middot; ${all.length} log${all.length!==1?'s':''}</span></h3>
-        <div style="display:flex;gap:6px;align-items:center;font-size:10px;color:var(--text-muted)">
-          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(59,130,246,0.4);border-radius:2px;vertical-align:middle"></span> Q</span>
-          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,0.4);border-radius:2px;vertical-align:middle"></span> Elim</span>
+        <div style="display:flex;gap:10px;align-items:center;font-size:10px;color:var(--text-muted);flex-wrap:wrap">
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(59,130,246,0.4);border-radius:2px;vertical-align:middle"></span> Qualification</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,0.4);border-radius:2px;vertical-align:middle"></span> Elimination</span>
           <span><span style="display:inline-block;width:10px;height:10px;background:rgba(249,115,22,0.4);border-radius:2px;vertical-align:middle"></span> Practice</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,0.6);border-radius:2px;vertical-align:middle;border:1px solid var(--red)"></span> Has errors</span>
           <button class="reset-zoom-btn" onclick="clearHistory();showHistoryPreview();" style="margin-left:8px">Clear</button>
         </div>
       </div>

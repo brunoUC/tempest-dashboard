@@ -62,6 +62,9 @@
     .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
     .section-title { font-size: 15px; font-weight: 600; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .src-tag { display:inline-block; font-size:9px; font-weight:700; padding:2px 7px; border-radius:3px; margin-left:8px; letter-spacing:0.5px; vertical-align:middle; }
+    .src-tag.supply { background:rgba(34,197,94,0.18); color:#4ade80; border:1px solid rgba(34,197,94,0.4); }
+    .src-tag.stator { background:rgba(249,115,22,0.18); color:#fb923c; border:1px solid rgba(249,115,22,0.4); }
     .banner { border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; }
     .banner.danger { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
     .banner.danger strong { color: var(--red); }
@@ -219,16 +222,16 @@ const PDH_CHANNELS=[
   {ch:11,name:'Turn Forward Left', subsystem:'Drivetrain'},
   {ch:12,name:'Drive Back Left',   subsystem:'Drivetrain'},
   {ch:13,name:'Turn Back Left',    subsystem:'Drivetrain'},
-  {ch:14,name:'Pivot Intake',      subsystem:'Intake'},
-  {ch:15,name:'Right Roller',      subsystem:'Intake'},
-  {ch:16,name:'Left Roller',       subsystem:'Intake'},
+  {ch:14,name:'Pivot Intake',      subsystem:'Intake Extensor'},
+  {ch:15,name:'Right Roller',      subsystem:'Intake Roller'},
+  {ch:16,name:'Left Roller',       subsystem:'Intake Roller'},
   {ch:17,name:'VRM',               subsystem:'VRM'},
   {ch:18,name:'Hood',              subsystem:'Shooter'},
   {ch:19,name:'Kicker',            subsystem:'Kicker'},
 ];
 const PDH_CH_MAP=new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
 const SUBSYSTEM_GROUPS=(()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
-const SUBSYSTEM_COLORS={'Drivetrain':'#3b82f6','Shooter':'#ef4444','Turret':'#a78bfa','Intake':'#f97316','Spindexer':'#10b981','Kicker':'#eab308','Climber':'#f43f5e','MPM':'#06b6d4','VRM':'#64748b'};
+const SUBSYSTEM_COLORS={'Drivetrain':'#3b82f6','Shooter':'#ef4444','Turret':'#a78bfa','Intake Roller':'#f97316','Intake Extensor':'#fbbf24','Spindexer':'#10b981','Kicker':'#eab308','Climber':'#f43f5e','MPM':'#06b6d4','VRM':'#64748b'};
 
 // ============== HELPERS ==============
 function dsMax(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const a=Math.floor(i*s),b=Math.min(Math.floor((i+1)*s),t.length);let mx=-Infinity,mi=a;for(let j=a;j<b;j++)if(v[j]>mx){mx=v[j];mi=j;}rt.push(t[mi]);rv.push(mx);}return{times:rt,values:rv};}
@@ -446,6 +449,12 @@ function renderPower(panel, P, toSec) {
 
   panel.innerHTML=`
     <div id="pw-banner"></div>
+    <div class="info-banner" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:10px 14px;margin:10px 0;font-size:12px;color:#cbd5e1;line-height:1.5">
+      <strong style="color:#60a5fa">About the data on this page:</strong>
+      Sections tagged <span style="display:inline-block;background:rgba(34,197,94,0.18);color:#4ade80;border:1px solid rgba(34,197,94,0.4);border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600">SUPPLY</span> use the <strong>PDH channel currents</strong> — the current drawn from the battery (what the breaker sees).
+      Sections tagged <span style="display:inline-block;background:rgba(249,115,22,0.18);color:#fb923c;border:1px solid rgba(249,115,22,0.4);border-radius:3px;padding:1px 6px;font-size:10px;font-weight:600">STATOR</span> use the <strong>motor stator currents</strong> reported by the motor controllers over CAN — the current flowing through the motor windings.
+      Stator current is typically <em>higher</em> than supply current (motor controllers transform voltage/current), so the two will not match and should not be compared directly.
+    </div>
     <div class="stats-grid">
       <div class="stat-card ${pCls}"><div class="label">Peak Total Current</div><div class="value">${peak.toFixed(1)} <span class="unit">A</span></div></div>
       <div class="stat-card"><div class="label">Avg Total Current</div><div class="value">${avg.toFixed(1)} <span class="unit">A</span></div></div>
@@ -456,19 +465,19 @@ function renderPower(panel, P, toSec) {
       <div class="stat-card ${t240>2?'danger':t240>0?'warning':'ok'}"><div class="label">Time &gt;240A (200%)</div><div class="value">${t240.toFixed(1)} <span class="unit">s</span></div></div>
       <div class="stat-card ${t360>0.5?'danger':'ok'}"><div class="label">Time &gt;360A (300%)</div><div class="value">${t360.toFixed(1)} <span class="unit">s</span></div></div>
     </div>
-    <div class="section-title">Total Current vs CB285 Trip Limits</div>
+    <div class="section-title">Total Current vs CB285 Trip Limits <span class="src-tag supply">SUPPLY</span></div>
     <div class="chart-box"><h3>Total Supply Current (sum of all PDH channels)</h3><canvas id="pwCurrent"></canvas>
       <div class="legend"><span><div class="dot" style="background:#3b82f6"></div>Total Current</span><span><div class="dot" style="background:#22c55e"></div>120A Rated</span><span><div class="dot" style="background:#f97316"></div>162A (135%)</span><span><div class="dot" style="background:#ef4444"></div>240A / 360A</span></div></div>
-    <div class="section-title">Breaker Thermal Analysis</div>
+    <div class="section-title">Breaker Thermal Analysis <span class="src-tag supply">SUPPLY</span></div>
     <div class="chart-box"><h3>Current Excursions vs CB285 Trip Curve (spec sheet axes: Time on X, Current on Y)</h3><canvas id="pwTrip"></canvas>
       <div class="legend" style="margin-top:8px"><span><div class="dot" style="background:#ef4444"></div>Trip Upper (will trip)</span><span><div class="dot" style="background:#f97316"></div>Trip Lower (may trip)</span><span style="font-size:10px;color:var(--text-muted)">Points in the shaded zone = risk of tripping</span></div></div>
     <div class="chart-box"><h3>Excursion Detail (every period above 120A)</h3><table class="data-table"><thead><tr><th>#</th><th>Start (s)</th><th>Duration (s)</th><th>Peak (A)</th><th>Avg (A)</th><th>Risk</th></tr></thead><tbody id="pwExcTable"></tbody></table></div>
-    <div class="section-title">Battery</div>
+    <div class="section-title">Battery <span class="src-tag supply">SUPPLY</span></div>
     <div class="chart-row">
       <div class="chart-box"><h3>Battery Voltage</h3><canvas id="pwVolt"></canvas></div>
       <div class="chart-box"><h3>Battery Current</h3><canvas id="pwBattCurr"></canvas></div>
     </div>
-    <div class="section-title">Per-Subsystem Power Draw (from PDH mapping)</div>
+    <div class="section-title">Per-Subsystem Power Draw (from PDH mapping) <span class="src-tag supply">SUPPLY</span></div>
     <div class="chart-box"><h3>Estimated power &amp; energy per subsystem — using PDH supply current × battery voltage</h3>
       <table class="data-table"><thead><tr><th>Subsystem</th><th>Channels</th><th>Peak (A)</th><th>Avg (A)</th><th>Avg (mA)</th><th>Peak (W)</th><th>Avg (W)</th><th>Energy (Wh)</th><th>Charge (mAh)</th><th>% of Total</th></tr></thead><tbody id="pwSubsystemTable"></tbody></table>
     </div>
@@ -476,13 +485,13 @@ function renderPower(panel, P, toSec) {
       <div class="chart-box"><h3>Subsystem Power Over Time (W)</h3><canvas id="pwSubPower"></canvas></div>
       <div class="chart-box"><h3>Cumulative Energy Consumption (Wh)</h3><canvas id="pwSubEnergy"></canvas></div>
     </div>
-    <div class="section-title">Per-Channel PDH Currents</div>
+    <div class="section-title">Per-Channel PDH Currents <span class="src-tag supply">SUPPLY</span></div>
     <div class="chart-box"><table class="data-table"><thead><tr><th>Ch</th><th>Name</th><th>Subsystem</th><th>Avg (A)</th><th>Max (A)</th><th>Avg (W)</th><th>mAh</th><th>% Total</th><th></th></tr></thead><tbody id="pwChTable"></tbody></table></div>
-    <div class="section-title">Subsystem Currents (aggregated from CAN motor data)</div>
+    <div class="section-title">Subsystem Currents (aggregated from CAN motor data) <span class="src-tag stator">STATOR</span></div>
     <div class="chart-box"><canvas id="pwSub"></canvas></div>
-    <div class="section-title">Motor Current Imbalance Check</div>
+    <div class="section-title">Motor Current Imbalance Check <span class="src-tag stator">STATOR</span></div>
     <div id="pwImbalance"></div>
-    <div class="section-title">Per-Subsystem Power Breakdown</div>
+    <div class="section-title">Per-Subsystem Power Breakdown <span class="src-tag stator">STATOR</span></div>
     <div class="sub-tab-bar" id="pwSubBar"></div>
     <div id="pwSubPanels"></div>`;
 

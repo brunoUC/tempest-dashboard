@@ -8,6 +8,21 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-storage-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyA_qgdzWfPxX4yn4FkwQGhekkIzgNQRwPU",
+      authDomain: "tempest-dashboard-45a1e.firebaseapp.com",
+      projectId: "tempest-dashboard-45a1e",
+      storageBucket: "tempest-dashboard-45a1e.firebasestorage.app",
+      messagingSenderId: "52754907843",
+      appId: "1:52754907843:web:8997cefa7d39fd7c54d876",
+      measurementId: "G-MT140L7WSE"
+    };
+    firebase.initializeApp(firebaseConfig);
+    window.cloudStorage = firebase.storage();
+  </script>
   <style>
     :root {
       --bg: #0f1117; --surface: #1a1d27; --surface2: #242736; --border: #2e3247;
@@ -105,6 +120,7 @@
     <div class="upload-zone" id="dropZone">
       <h2>Drop .wpilog file here</h2>
       <p>or click to browse &mdash; single file to analyze, or multiple to build history</p>
+      <p style="font-size:11px;margin-top:6px;color:var(--cyan)">&#9729; All uploads are shared with your team via the cloud</p>
       <input type="file" id="fileInput" accept=".wpilog" multiple />
     </div>
     <div id="historyPreview" style="max-width:700px;margin:16px auto;display:none"></div>
@@ -1050,6 +1066,87 @@ const MECHANISMS = [
 // ============== MATCH PROFILE / HISTORY ==============
 const HISTORY_KEY = 'tempest_match_history';
 
+// ============== CLOUD STORAGE (Firebase) ==============
+// Uploads .wpilog + profile JSON to Firebase Storage so the whole team can see them
+async function uploadToCloud(file, profile) {
+  if (!window.cloudStorage) return false;
+  try {
+    const logRef = cloudStorage.ref('logs/' + file.name);
+    const profRef = cloudStorage.ref('profiles/' + file.name + '.json');
+    await logRef.put(file, {contentType: 'application/octet-stream'});
+    const profileBlob = new Blob([JSON.stringify(profile)], {type: 'application/json'});
+    await profRef.put(profileBlob, {contentType: 'application/json'});
+    return true;
+  } catch (err) {
+    console.warn('Cloud upload failed:', err);
+    return false;
+  }
+}
+
+async function listCloudLogs() {
+  if (!window.cloudStorage) return [];
+  try {
+    const profRef = cloudStorage.ref('profiles');
+    const result = await profRef.listAll();
+    const profiles = await Promise.all(result.items.map(async item => {
+      try {
+        const url = await item.getDownloadURL();
+        const resp = await fetch(url);
+        const profile = await resp.json();
+        profile.cloudFilename = item.name.replace(/\.json$/, '');
+        return profile;
+      } catch { return null; }
+    }));
+    return profiles.filter(p => p !== null);
+  } catch (err) {
+    console.warn('Cloud list failed:', err);
+    return [];
+  }
+}
+
+async function downloadCloudLog(filename) {
+  if (!window.cloudStorage) return null;
+  try {
+    const logRef = cloudStorage.ref('logs/' + filename);
+    const url = await logRef.getDownloadURL();
+    const resp = await fetch(url);
+    return await resp.arrayBuffer();
+  } catch (err) {
+    console.warn('Cloud download failed:', err);
+    return null;
+  }
+}
+
+// Merge cloud profiles into local history (cloud wins on conflict)
+async function syncCloudToHistory() {
+  const cloudProfiles = await listCloudLogs();
+  if (!cloudProfiles.length) return 0;
+  const local = loadHistory();
+  const localMap = new Map(local.map(p => [p.filename, p]));
+  for (const cp of cloudProfiles) {
+    cp.fromCloud = true;
+    localMap.set(cp.filename, cp);
+  }
+  saveHistory(Array.from(localMap.values()));
+  return cloudProfiles.length;
+}
+
+async function loadCloudLog(filename) {
+  const statusEl = document.getElementById('cloudStatus');
+  if (statusEl) { statusEl.style.display='block'; statusEl.textContent='Downloading ' + filename + '...'; }
+  const buf = await downloadCloudLog(filename);
+  if (!buf) { if(statusEl) statusEl.textContent='Download failed'; return; }
+  if (statusEl) statusEl.textContent='Parsing...';
+  try {
+    const P = new WPILOGParser(buf); P.parse();
+    sessionLogs.set(filename, {parser: P, fileName: filename});
+    if (statusEl) statusEl.style.display='none';
+    buildDashboard(P, filename);
+  } catch (err) {
+    if (statusEl) statusEl.textContent='Error: ' + err.message;
+  }
+}
+
 function extractProfile(P, toSec, filename) {
   const chE=P.get('/PowerDistribution/ChannelCurrent'), totE=P.get('/PowerDistribution/TotalCurrent');
   const voltE=P.get('/SystemStats/BatteryVoltage')||P.get('/PowerDistribution/Voltage');
@@ -1278,10 +1375,20 @@ function renderHistory(panel, currentProfile) {
   for (const m of history) {
     const isCurrent = currentProfile && m.filename === currentProfile.filename;
     const isCached = cachedNames.has(m.filename);
-    const rowStyle = isCurrent ? 'background:rgba(59,130,246,0.1)' : (isCached ? 'cursor:pointer' : '');
-    const clickAttr = (!isCurrent && isCached) ? ` onclick="switchToLog('${m.filename.replace(/'/g,"\\'")}')"` : '';
+    const inCloud = m.fromCloud || m.cloudFilename;
+    const canSwitch = isCached || inCloud;
+    const rowStyle = isCurrent ? 'background:rgba(59,130,246,0.1)' : (canSwitch ? 'cursor:pointer' : '');
+    const clickAttr = (!isCurrent && canSwitch) ? ` onclick="switchToLog('${m.filename.replace(/'/g,"\\'")}')"` : '';
+    let badge = '';
+    if (isCached && !isCurrent) badge = '<span style="color:var(--green);font-size:9px;margin-left:4px">&#9679; loaded</span>';
+    else if (inCloud && !isCurrent) badge = '<span style="color:var(--cyan);font-size:9px;margin-left:4px">&#9729; cloud</span>';
+    let actionCell;
+    if (isCurrent) actionCell = '<span style="color:var(--accent);font-size:10px">&#9654; VIEWING</span>';
+    else if (isCached) actionCell = '<span style="color:var(--text-muted);font-size:10px">switch &#8594;</span>';
+    else if (inCloud) actionCell = '<span style="color:var(--cyan);font-size:10px">download &#8595;</span>';
+    else actionCell = '<span style="color:var(--text-muted);font-size:9px;opacity:0.5">not loaded</span>';
     matchesHTML += `<tr style="${rowStyle}"${clickAttr}>
-      <td>${m.filename.replace('.wpilog','')} ${isCached && !isCurrent ? '<span style="color:var(--green);font-size:9px;margin-left:4px">&#9679; loaded</span>' : ''}</td>
+      <td>${m.filename.replace('.wpilog','')} ${badge}</td>
       <td>${m.date?new Date(m.date).toLocaleDateString():'-'}</td>
       <td>${m.duration.toFixed(0)}s</td>
       <td>${m.peakCurrent.toFixed(1)}A</td>
@@ -1289,10 +1396,10 @@ function renderHistory(panel, currentProfile) {
       <td>${m.minVoltage.toFixed(2)}V</td>
       <td>${m.timeAbove120.toFixed(1)}s</td>
       <td>${riskCell(m)}</td>
-      <td>${isCurrent?'<span style="color:var(--accent);font-size:10px">&#9654; VIEWING</span>' : (isCached?'<span style="color:var(--text-muted);font-size:10px;cursor:pointer">switch &#8594;</span>':'<span style="color:var(--text-muted);font-size:9px;opacity:0.5">not loaded</span>')}</td></tr>`;
+      <td>${actionCell}</td></tr>`;
   }
   matchesHTML += '</tbody></table>';
-  matchesHTML += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Click a <span style="color:var(--green)">&#9679; loaded</span> match to switch to it. Upload more logs with the <strong>+ Upload Log</strong> button.</div>`;
+  matchesHTML += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Click any <span style="color:var(--green)">&#9679; loaded</span> or <span style="color:var(--cyan)">&#9729; cloud</span> match to open it. Cloud logs are shared with the whole team. Upload more with the <strong>+ Upload Log</strong> button.</div>`;
   matchesHTML += '</div>';
 
   // Aggregate baseline
@@ -1388,8 +1495,9 @@ function switchToLog(filename) {
     buildDashboard(cached.parser, cached.fileName);
     return;
   }
-  // Not cached — can't switch, show message
-  alert('Log "'+filename+'" is not loaded in this session. Please upload it again.');
+  // Not cached locally — try to download from cloud
+  showCloudToast('Downloading ' + filename + ' from cloud...');
+  loadCloudLog(filename);
 }
 
 function handleFiles(files) {
@@ -1405,8 +1513,40 @@ dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remov
 fileInput.addEventListener('change',()=>{handleFiles(fileInput.files);fileInput.value='';});
 fileInput2.addEventListener('change',()=>{handleFiles(fileInput2.files);fileInput2.value='';});
 
-// Show history preview on page load
-showHistoryPreview();
+// Toast for cloud status messages
+function showCloudToast(msg, isError) {
+  let toast = document.getElementById('cloudToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'cloudToast';
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:12px;z-index:1000;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:opacity 0.3s';
+    document.body.appendChild(toast);
+  }
+  toast.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  toast.style.color = isError ? 'var(--red)' : 'var(--green)';
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>{toast.style.opacity='0';}, 4000);
+}
+
+// Sync cloud logs on page load, then show history preview
+(async function initCloudSync() {
+  showHistoryPreview();
+  try {
+    const statusEl = document.createElement('div');
+    statusEl.id = 'cloudStatus';
+    statusEl.style.cssText = 'max-width:700px;margin:8px auto;text-align:center;font-size:11px;color:var(--text-muted)';
+    statusEl.textContent = 'Syncing team logs from cloud...';
+    document.getElementById('upload-section').appendChild(statusEl);
+    const count = await syncCloudToHistory();
+    statusEl.textContent = count ? `✓ Synced ${count} team log${count>1?'s':''} from cloud` : 'No team logs in cloud yet';
+    setTimeout(()=>{statusEl.style.opacity='0.5';}, 2000);
+    showHistoryPreview();
+  } catch (err) {
+    console.warn('Cloud sync failed:', err);
+  }
+})();
 
 function loadFile(file){
   uploadSection.style.display='none';loadingDiv.style.display='block';app.style.display='none';
@@ -1417,6 +1557,13 @@ function loadFile(file){
     sessionLogs.set(file.name,{parser:P,fileName:file.name});
     loadingDiv.style.display='none';app.style.display='block';
     buildDashboard(P,file.name);
+    // Upload to cloud in background (non-blocking)
+    let minTs=Infinity;for(const[,recs]of P.records)if(recs.length&&recs[0].timestamp<minTs)minTs=recs[0].timestamp;
+    const toSec=ts=>(ts-minTs)/1e6;
+    const profile=extractProfile(P,toSec,file.name);
+    uploadToCloud(file, profile).then(ok=>{
+      if(ok) showCloudToast('Uploaded to team cloud: ' + file.name);
+    });
   }catch(err){loadingDiv.textContent='Error: '+err.message;console.error(err);}};
   reader.readAsArrayBuffer(file);
 }
@@ -1443,6 +1590,8 @@ function loadFilesForHistory(files){
         addToHistory(profile);
         sessionLogs.set(files[i].name,{parser:P,fileName:files[i].name});
         lastP=P;lastFn=files[i].name;
+        // Upload each to cloud in background
+        uploadToCloud(files[i], profile).catch(()=>{});
       }catch(err){console.warn('Skipping '+files[i].name+': '+err.message);}
       processed++;
       loadingDiv.textContent=`Processing log ${Math.min(processed+1,total)} of ${total}...`;

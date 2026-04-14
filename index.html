@@ -202,6 +202,34 @@ const CB285_TRIP=[
 ];
 function getTripTime(a,b){const p=(a/CB285_RATED)*100,c=CB285_TRIP;if(p<=c[0].pct)return Infinity;if(p>=c[c.length-1].pct)return c[c.length-1][b];for(let i=0;i<c.length-1;i++){if(p>=c[i].pct&&p<=c[i+1].pct){const t=(p-c[i].pct)/(c[i+1].pct-c[i].pct);return Math.exp(Math.log(c[i][b])+t*(Math.log(c[i+1][b])-Math.log(c[i][b])));}}return c[c.length-1][b];}
 
+// ============== PDH CHANNEL MAP ==============
+// Maps each PDH channel (0-19) to the motor/load name and subsystem it powers.
+const PDH_CHANNELS=[
+  {ch:0, name:'Flywheel 2',        subsystem:'Shooter'},
+  {ch:1, name:'Flywheel 1',        subsystem:'Shooter'},
+  {ch:2, name:'Steer Back Right',  subsystem:'Drivetrain'},
+  {ch:3, name:'Drive Back Right',  subsystem:'Drivetrain'},
+  {ch:4, name:'Steer Front Right', subsystem:'Drivetrain'},
+  {ch:5, name:'Drive Front Right', subsystem:'Drivetrain'},
+  {ch:6, name:'Climber',           subsystem:'Climber'},
+  {ch:7, name:'Mini Power Module', subsystem:'MPM'},
+  {ch:8, name:'Turret',            subsystem:'Turret'},
+  {ch:9, name:'Spindexer',         subsystem:'Spindexer'},
+  {ch:10,name:'Drive Forward Left',subsystem:'Drivetrain'},
+  {ch:11,name:'Turn Forward Left', subsystem:'Drivetrain'},
+  {ch:12,name:'Drive Back Left',   subsystem:'Drivetrain'},
+  {ch:13,name:'Turn Back Left',    subsystem:'Drivetrain'},
+  {ch:14,name:'Pivot Intake',      subsystem:'Intake'},
+  {ch:15,name:'Right Roller',      subsystem:'Intake'},
+  {ch:16,name:'Left Roller',       subsystem:'Intake'},
+  {ch:17,name:'VRM',               subsystem:'VRM'},
+  {ch:18,name:'Hood',              subsystem:'Shooter'},
+  {ch:19,name:'Kicker',            subsystem:'Kicker'},
+];
+const PDH_CH_MAP=new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
+const SUBSYSTEM_GROUPS=(()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
+const SUBSYSTEM_COLORS={'Drivetrain':'#3b82f6','Shooter':'#ef4444','Turret':'#a78bfa','Intake':'#f97316','Spindexer':'#10b981','Kicker':'#eab308','Climber':'#f43f5e','MPM':'#06b6d4','VRM':'#64748b'};
+
 // ============== HELPERS ==============
 function dsMax(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const a=Math.floor(i*s),b=Math.min(Math.floor((i+1)*s),t.length);let mx=-Infinity,mi=a;for(let j=a;j<b;j++)if(v[j]>mx){mx=v[j];mi=j;}rt.push(t[mi]);rv.push(mx);}return{times:rt,values:rv};}
 function ds(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const idx=Math.floor(i*s);rt.push(t[idx]);rv.push(v[idx]);}return{times:rt,values:rv};}
@@ -440,9 +468,17 @@ function renderPower(panel, P, toSec) {
       <div class="chart-box"><h3>Battery Voltage</h3><canvas id="pwVolt"></canvas></div>
       <div class="chart-box"><h3>Battery Current</h3><canvas id="pwBattCurr"></canvas></div>
     </div>
+    <div class="section-title">Per-Subsystem Power Draw (from PDH mapping)</div>
+    <div class="chart-box"><h3>Estimated power &amp; energy per subsystem — using PDH supply current × battery voltage</h3>
+      <table class="data-table"><thead><tr><th>Subsystem</th><th>Channels</th><th>Peak (A)</th><th>Avg (A)</th><th>Avg (mA)</th><th>Peak (W)</th><th>Avg (W)</th><th>Energy (Wh)</th><th>Charge (mAh)</th><th>% of Total</th></tr></thead><tbody id="pwSubsystemTable"></tbody></table>
+    </div>
+    <div class="chart-row">
+      <div class="chart-box"><h3>Subsystem Power Over Time (W)</h3><canvas id="pwSubPower"></canvas></div>
+      <div class="chart-box"><h3>Cumulative Energy Consumption (Wh)</h3><canvas id="pwSubEnergy"></canvas></div>
+    </div>
     <div class="section-title">Per-Channel PDH Currents</div>
-    <div class="chart-box"><table class="data-table"><thead><tr><th>Ch</th><th>Avg (A)</th><th>Max (A)</th><th>% Total</th><th></th></tr></thead><tbody id="pwChTable"></tbody></table></div>
-    <div class="section-title">Subsystem Currents (aggregated)</div>
+    <div class="chart-box"><table class="data-table"><thead><tr><th>Ch</th><th>Name</th><th>Subsystem</th><th>Avg (A)</th><th>Max (A)</th><th>Avg (W)</th><th>mAh</th><th>% Total</th><th></th></tr></thead><tbody id="pwChTable"></tbody></table></div>
+    <div class="section-title">Subsystem Currents (aggregated from CAN motor data)</div>
     <div class="chart-box"><canvas id="pwSub"></canvas></div>
     <div class="section-title">Motor Current Imbalance Check</div>
     <div id="pwImbalance"></div>
@@ -495,8 +531,91 @@ function renderPower(panel, P, toSec) {
   if(vd.times.length){const v=dsMax(vd.times,vd.values,MAX_PTS);mkChart(panel.querySelector('#pwVolt'),{type:'line',data:{labels:v.times.map(t=>t.toFixed(1)),datasets:[{data:v.values,borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},suggestedMin:6,suggestedMax:14}},plugins:{legend:{display:false}}}});}
   if(bd.times.length){const b=dsMax(bd.times,bd.values,MAX_PTS);mkChart(panel.querySelector('#pwBattCurr'),{type:'line',data:{labels:b.times.map(t=>t.toFixed(1)),datasets:[{data:b.values,borderColor:'#f472b6',backgroundColor:'rgba(244,114,182,0.08)',fill:true,borderWidth:1.5,pointRadius:0,tension:0.1}]},options:{scales:{x:{ticks:{color:'#9ca3af',maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{display:false}}}});}
 
+  // ---- Per-subsystem power draw (from PDH channel mapping) ----
+  const avgVolts = vd.values.length ? vd.values.reduce((a,b)=>a+b,0)/vd.values.length : 12.0;
+  // Build per-channel time-series of current from PDH ChannelCurrent records
+  const chTimes = [];
+  const chSeries = [];
+  if (chE && chE.data.length) {
+    const nc = chE.data[0].value.length;
+    for (let c=0;c<nc;c++) chSeries.push([]);
+    for (const r of chE.data) {
+      if (!Array.isArray(r.value)) continue;
+      chTimes.push(toSec(r.timestamp));
+      for (let c=0;c<Math.min(nc,chSeries.length);c++) chSeries[c].push(r.value[c] ?? 0);
+    }
+  }
+  // Per-channel charge (mAh) computed via trapezoidal integration
+  const chChargeMAh = chSeries.map(series => {
+    let chargeAs = 0;
+    for (let i=1;i<series.length;i++){
+      const dt = chTimes[i]-chTimes[i-1];
+      if (dt>0 && dt<1) chargeAs += ((series[i-1]+series[i])/2) * dt;
+    }
+    return chargeAs * 1000/3600;
+  });
+  // Per-subsystem time-series and aggregated stats
+  const subsystemStats = [];
+  const subsystemSeries = new Map();
+  SUBSYSTEM_GROUPS.forEach((channels, subsystem) => {
+    const series = new Array(chTimes.length).fill(0);
+    for (const c of channels) {
+      if (c < chSeries.length) {
+        const s = chSeries[c];
+        for (let i=0;i<series.length;i++) series[i] += s[i] || 0;
+      }
+    }
+    subsystemSeries.set(subsystem, series);
+    let peakA=0, sumA=0, chargeAs=0;
+    for (let i=0;i<series.length;i++){
+      const v=series[i]; if(v>peakA)peakA=v; sumA+=v;
+      if(i>0){const dt=chTimes[i]-chTimes[i-1]; if(dt>0&&dt<1) chargeAs += ((series[i-1]+v)/2)*dt;}
+    }
+    const avgA = series.length ? sumA/series.length : 0;
+    const chargeMAh = chargeAs*1000/3600;
+    const avgW = avgA * avgVolts;
+    const peakW = peakA * avgVolts;
+    const energyWh = chargeAs * avgVolts / 3600;
+    subsystemStats.push({subsystem,channels:channels.slice().sort((a,b)=>a-b),peakA,avgA,chargeMAh,avgW,peakW,energyWh});
+  });
+  const totalSubEnergyWh = subsystemStats.reduce((s,x)=>s+x.energyWh,0);
+  subsystemStats.sort((a,b)=>b.energyWh-a.energyWh);
+  const subTbody = panel.querySelector('#pwSubsystemTable');
+  subTbody.innerHTML = '';
+  for (const s of subsystemStats){
+    const pct = totalSubEnergyWh>0 ? (s.energyWh/totalSubEnergyWh*100) : 0;
+    const cls = s.peakA>40?'danger':s.peakA>20?'hot':'';
+    const color = SUBSYSTEM_COLORS[s.subsystem]||'#9ca3af';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><span style="display:inline-block;width:10px;height:10px;background:${color};border-radius:2px;margin-right:6px"></span><strong>${s.subsystem}</strong></td><td style="font-size:10px;color:var(--text-muted)">${s.channels.map(c=>'Ch'+c).join(', ')}</td><td>${s.peakA.toFixed(1)}</td><td>${s.avgA.toFixed(2)}</td><td>${(s.avgA*1000).toFixed(0)}</td><td>${s.peakW.toFixed(0)}</td><td>${s.avgW.toFixed(1)}</td><td>${s.energyWh.toFixed(2)}</td><td>${s.chargeMAh.toFixed(0)}</td><td>${pct.toFixed(1)}%</td>`;
+    subTbody.appendChild(tr);
+  }
+  // Subsystem power-over-time chart (stacked-ish via multi-line)
+  const subPowerDS = subsystemStats.filter(s=>s.avgA>0.05).map(s => {
+    const series = subsystemSeries.get(s.subsystem).map(a => a*avgVolts);
+    const d = dsMax(chTimes, series, MAX_PTS);
+    return {label:s.subsystem, data:d.values, _times:d.times, borderColor:SUBSYSTEM_COLORS[s.subsystem]||'#9ca3af', backgroundColor:(SUBSYSTEM_COLORS[s.subsystem]||'#9ca3af')+'22', borderWidth:1.2, pointRadius:0, tension:0.1, fill:false};
+  });
+  const subPowerLabels = subPowerDS.length ? subPowerDS[0]._times.map(t=>t.toFixed(1)) : [];
+  mkChart(panel.querySelector('#pwSubPower'),{type:'line',data:{labels:subPowerLabels,datasets:subPowerDS},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:15},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Power (W)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7',boxWidth:10,font:{size:10}}}}}});
+  // Cumulative energy chart (Wh over time per subsystem)
+  const subEnergyDS = subsystemStats.filter(s=>s.energyWh>0.01).map(s => {
+    const series = subsystemSeries.get(s.subsystem);
+    const cum = new Array(series.length).fill(0);
+    let acc=0;
+    for (let i=1;i<series.length;i++){
+      const dt = chTimes[i]-chTimes[i-1];
+      if (dt>0 && dt<1) acc += ((series[i-1]+series[i])/2) * dt * avgVolts / 3600;
+      cum[i] = acc;
+    }
+    const d = ds(chTimes, cum, MAX_PTS);
+    return {label:s.subsystem, data:d.values, _times:d.times, borderColor:SUBSYSTEM_COLORS[s.subsystem]||'#9ca3af', backgroundColor:(SUBSYSTEM_COLORS[s.subsystem]||'#9ca3af')+'22', borderWidth:1.5, pointRadius:0, tension:0.2, fill:false};
+  });
+  const subEnergyLabels = subEnergyDS.length ? subEnergyDS[0]._times.map(t=>t.toFixed(1)) : [];
+  mkChart(panel.querySelector('#pwSubEnergy'),{type:'line',data:{labels:subEnergyLabels,datasets:subEnergyDS},options:{scales:{x:{title:{display:true,text:'Time (s)',color:'#9ca3af'},ticks:{color:'#9ca3af',maxTicksLimit:15},grid:{color:'rgba(255,255,255,0.05)'}},y:{title:{display:true,text:'Cumulative Energy (Wh)',color:'#9ca3af'},ticks:{color:'#9ca3af'},grid:{color:'rgba(255,255,255,0.05)'},min:0}},plugins:{legend:{labels:{color:'#e4e4e7',boxWidth:10,font:{size:10}}}}}});
+
   const tbody=panel.querySelector('#pwChTable');const totalAvg=chStats.reduce((s,c)=>s+c.avg,0);const sorted=[...chStats].sort((a,b)=>b.avg-a.avg);const maxAvg=sorted.length?sorted[0].avg:1;
-  for(const ch of sorted){if(ch.avg<0.01&&ch.max<0.1)continue;const pct=totalAvg>0?(ch.avg/totalAvg*100):0;const cls=ch.max>40?'danger':ch.max>20?'hot':'';const tr=document.createElement('tr');tr.innerHTML=`<td>Ch ${ch.channel}</td><td>${ch.avg.toFixed(2)}</td><td>${ch.max.toFixed(1)}</td><td>${pct.toFixed(1)}%</td><td><div class="bar ${cls}" style="width:${(ch.avg/maxAvg*100).toFixed(0)}%"></div></td>`;tbody.appendChild(tr);}
+  for(const ch of sorted){if(ch.avg<0.01&&ch.max<0.1)continue;const pct=totalAvg>0?(ch.avg/totalAvg*100):0;const cls=ch.max>40?'danger':ch.max>20?'hot':'';const info=PDH_CH_MAP.get(ch.channel);const nameStr=info?info.name:'—';const subStr=info?info.subsystem:'—';const color=info?(SUBSYSTEM_COLORS[info.subsystem]||'#9ca3af'):'#9ca3af';const avgW=ch.avg*avgVolts;const mAh=chChargeMAh[ch.channel]||0;const tr=document.createElement('tr');tr.innerHTML=`<td>Ch ${ch.channel}</td><td>${nameStr}</td><td><span style="display:inline-block;width:8px;height:8px;background:${color};border-radius:2px;margin-right:5px"></span>${subStr}</td><td>${ch.avg.toFixed(2)}</td><td>${ch.max.toFixed(1)}</td><td>${avgW.toFixed(1)}</td><td>${mAh.toFixed(0)}</td><td>${pct.toFixed(1)}%</td><td><div class="bar ${cls}" style="width:${(ch.avg/maxAvg*100).toFixed(0)}%"></div></td>`;tbody.appendChild(tr);}
 
   const subDefs=[{name:'Drive (all)',entries:[/\/Drive\/Module\d+\/DriveCurrentAmps/]},{name:'Turn (all)',entries:[/\/Drive\/Module\d+\/TurnCurrentAmps/]},{name:'Extensor',entries:[/\/Subsystems\/Extensor\/ExtensorCurrent$/]},{name:'Spindexer',entries:[/\/Subsystems\/Spindexer\/SpindexerCurrent$/]},{name:'Roller',entries:[/\/Subsystems\/Roller\/RollerCurrent$/]},{name:'Kicker',entries:[/\/Subsystems\/Kicker\/KickerCurrent$/]},{name:'Climber',entries:[/\/Subsystems\/Climber\/ClimberCurrent$/]},{name:'Turret',entries:[/\/Subsystems\/Shooter\/Turret\/\/Current$/]}];
   const subDS=[],subLR={len:0,arr:[]};

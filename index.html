@@ -569,6 +569,20 @@ function renderPower(panel, P, toSec, fileName) {
   for(let i=1;i<cV.length;i++){const dt=cT[i]-cT[i-1];if(dt>0&&dt<1){if(cV[i]>120)t120+=dt;if(cV[i]>240)t240+=dt;if(cV[i]>360)t360+=dt;}}
   const pCls=peak>360?'danger':peak>240?'warning':'ok', vCls=minV<7?'danger':minV<9?'warning':'ok';
 
+  // Total energy (Wh) via trapezoidal integration: ∫ V(t)·I(t) dt / 3600
+  let pwTotalWh=0;
+  if(cT.length>1&&vd.times.length>1){
+    let vi2=0;
+    for(let i=1;i<cT.length;i++){
+      const dt=cT[i]-cT[i-1];if(dt<=0||dt>2)continue;
+      while(vi2<vd.times.length-2&&vd.times[vi2+1]<cT[i])vi2++;
+      let v;
+      if(vi2>=vd.times.length-1)v=vd.values[vd.values.length-1];
+      else{const t0=vd.times[vi2],t1=vd.times[vi2+1];const frac=t1>t0?(cT[i]-t0)/(t1-t0):0;v=vd.values[vi2]+frac*(vd.values[vi2+1]-vd.values[vi2]);}
+      pwTotalWh+=((cV[i-1]+cV[i])/2)*v*dt/3600;
+    }
+  }
+
   panel.innerHTML=`
     <div id="pw-banner"></div>
     <div class="info-banner" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:10px 14px;margin:10px 0;font-size:12px;color:#cbd5e1;line-height:1.5">
@@ -586,6 +600,7 @@ function renderPower(panel, P, toSec, fileName) {
       <div class="stat-card ${t120>10?'warning':'ok'}"><div class="label">Time &gt;120A</div><div class="value">${t120.toFixed(1)} <span class="unit">s</span></div></div>
       <div class="stat-card ${t240>2?'danger':t240>0?'warning':'ok'}"><div class="label">Time &gt;240A (200%)</div><div class="value">${t240.toFixed(1)} <span class="unit">s</span></div></div>
       <div class="stat-card ${t360>0.5?'danger':'ok'}"><div class="label">Time &gt;360A (300%)</div><div class="value">${t360.toFixed(1)} <span class="unit">s</span></div></div>
+      <div class="stat-card" style="border-color:rgba(168,85,247,0.4)"><div class="label">Total Energy Used</div><div class="value">${pwTotalWh.toFixed(1)} <span class="unit">Wh</span></div></div>
     </div>
     <div class="section-title">Total Current vs CB285 Trip Limits <span class="src-tag supply">SUPPLY</span></div>
     <div class="chart-box"><h3>Total Supply Current (sum of all PDH channels)</h3><canvas id="pwCurrent"></canvas>
@@ -1430,6 +1445,28 @@ function extractProfile(P, toSec, filename) {
   const avgVoltage=vd.values.length?vd.values.reduce((a,b)=>a+b,0)/vd.values.length:0;
   let t120=0;for(let i=1;i<cV.length;i++){const dt=cT[i]-cT[i-1];if(dt>0&&dt<1&&cV[i]>120)t120+=dt;}
 
+  // Total energy (Wh) via trapezoidal integration: ∫ V(t)·I(t) dt / 3600
+  let totalWh = 0;
+  if (cT.length > 1 && vd.times.length > 1) {
+    // Interpolate voltage at current timestamps
+    let vi = 0;
+    for (let i = 1; i < cT.length; i++) {
+      const dt = cT[i] - cT[i-1];
+      if (dt <= 0 || dt > 2) continue;
+      // Find voltage at this time via linear interp
+      while (vi < vd.times.length - 2 && vd.times[vi+1] < cT[i]) vi++;
+      let v;
+      if (vi >= vd.times.length - 1) v = vd.values[vd.values.length-1];
+      else {
+        const t0 = vd.times[vi], t1 = vd.times[vi+1];
+        const frac = t1 > t0 ? (cT[i] - t0) / (t1 - t0) : 0;
+        v = vd.values[vi] + frac * (vd.values[vi+1] - vd.values[vi]);
+      }
+      const pAvg = ((cV[i-1] + cV[i]) / 2) * v;
+      totalWh += pAvg * dt / 3600;
+    }
+  }
+
   // Per-motor stats
   const motorPaths = [
     'Drive/Module0/DriveCurrentAmps','Drive/Module1/DriveCurrentAmps','Drive/Module2/DriveCurrentAmps','Drive/Module3/DriveCurrentAmps',
@@ -1506,7 +1543,7 @@ function extractProfile(P, toSec, filename) {
     filename: filename || 'unknown',
     date: new Date().toISOString(),
     _v: 2, // schema version: bump when extractProfile output changes. UI only trusts error counts at v>=2
-    peakCurrent, avgCurrent, duration, minVoltage, avgVoltage, timeAbove120: t120,
+    peakCurrent, avgCurrent, duration, minVoltage, avgVoltage, timeAbove120: t120, totalWh,
     breakerRisk: worstRisk,
     worstExcursion: worstExc ? {duration: worstExc.duration, peakCurrent: worstExc.peakCurrent, avgCurrent: worstExc.avgCurrent, startTime: worstExc.startTime} : null,
     excursionCount,
@@ -1740,7 +1777,8 @@ function showHistoryPreview() {
     let statsHTML = '';
     if (p.peakCurrent != null) {
       const peak = p.peakCurrent, dur = p.duration, minV = p.minVoltage;
-      statsHTML = `<div class="mc-stats">${peak?`<span><b>${peak.toFixed(0)}A</b> peak</span>`:''}${dur?`<span><b>${dur.toFixed(0)}s</b></span>`:''}${minV?`<span><b>${minV.toFixed(1)}V</b></span>`:''}</div>`;
+      const wh = p.totalWh;
+      statsHTML = `<div class="mc-stats">${peak?`<span><b>${peak.toFixed(0)}A</b> peak</span>`:''}${dur?`<span><b>${dur.toFixed(0)}s</b></span>`:''}${minV?`<span><b>${minV.toFixed(1)}V</b></span>`:''}${wh?`<span><b>${wh.toFixed(1)}Wh</b></span>`:''}</div>`;
     }
 
     // Only trust error counts from profiles extracted under current schema (v2+).

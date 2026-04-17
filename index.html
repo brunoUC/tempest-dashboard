@@ -1172,11 +1172,12 @@ function detectShots(P, toSec) {
   const fw   = ts(fwV);
   const fwsp = fwSp ? ts(fwSp) : null;
 
-  // Tunables (lower/looser defaults — previous values missed fast-fire bursts)
+  // Tunables — balance: too loose picks up PID ringing as shots; too tight misses fast-fire balls.
   const FW_ARMED_RPM      = 500;   // flywheel target (or actual) must exceed this to count as "shooting"
-  const DIP_ENTER_RATIO   = 0.08;  // drop ≥8% below target to START tracking a dip
-  const DIP_REBOUND_RATIO = 0.04;  // rebound of ≥4% from that dip's minimum → commit the shot (handles fast-fire where velocity never fully recovers)
-  const MIN_SHOT_GAP_S    = 0.05;  // refractory period between ball detections
+  const DIP_ENTER_RATIO   = 0.15;  // peak must be ≥15% of target below setpoint (absolute depth)
+  const DIP_REBOUND_RATIO = 0.06;  // prominence: peak must rise ≥6% from valley AND fall ≥6% on the way down
+  const MIN_SHOT_GAP_S    = 0.06;  // refractory period between ball detections
+  const MIN_DIP_DURATION_S = 0.015; // dip must be sustained ≥15ms — filters out PID ringing / single-sample spikes
   const BURST_GAP_S       = 1.0;   // gap > 1s opens a new burst
   const PEAK_WINDOW_S     = 1.0;   // rolling window for peak balls-per-second
 
@@ -1192,6 +1193,7 @@ function detectShots(P, toSec) {
   let valleyVal = 0;
   let peakVal = 0;
   let peakMeta = null;
+  let peakEnterT = 0; // when we entered IN_PEAK (for min-duration check)
   let lastCommittedT = -Infinity;
   let wasArmed = false;
 
@@ -1216,8 +1218,11 @@ function detectShots(P, toSec) {
     const armed   = fwArmed && kTarget >= 1;
 
     if (!armed) {
-      // Entering disarmed: flush in-progress peak if it was real
-      if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO) commit(peakMeta);
+      // Entering disarmed: flush in-progress peak only if it satisfied the duration requirement
+      if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO
+          && peakMeta && (peakMeta.t - peakEnterT) >= MIN_DIP_DURATION_S) {
+        commit(peakMeta);
+      }
       phase = 'SEARCH_PEAK';
       valleyVal = 0; peakVal = 0; peakMeta = null;
       wasArmed = false;
@@ -1237,14 +1242,19 @@ function detectShots(P, toSec) {
         phase = 'IN_PEAK';
         peakVal = b;
         peakMeta = { t, kickerVel:absV, kickerTarget:kTarget, flywheelVel:fwVal, flywheelTarget:fwspVal };
+        peakEnterT = t;
       }
     } else { // IN_PEAK
       if (b > peakVal) {
         peakVal = b;
         peakMeta = { t, kickerVel:absV, kickerTarget:kTarget, flywheelVel:fwVal, flywheelTarget:fwspVal };
       } else if (peakVal - b >= DIP_REBOUND_RATIO) {
-        // Peak confirmed by the required prominence on the descending side → commit
-        commit(peakMeta);
+        // Peak confirmed by the required prominence — but also require the whole dip was sustained
+        // long enough to be a real ball (filters PID ringing / single-sample spikes).
+        const dipDuration = t - peakEnterT;
+        if (dipDuration >= MIN_DIP_DURATION_S) {
+          commit(peakMeta);
+        }
         // Reset for next peak: current `b` is the new baseline valley
         phase = 'SEARCH_PEAK';
         valleyVal = b;
@@ -1252,8 +1262,11 @@ function detectShots(P, toSec) {
       }
     }
   }
-  // Flush any dangling peak at the end of the log
-  if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO) commit(peakMeta);
+  // Flush any dangling peak at end of log (with duration check)
+  if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO
+      && peakMeta && (peakMeta.t - peakEnterT) >= MIN_DIP_DURATION_S) {
+    commit(peakMeta);
+  }
 
   // Group shots into bursts (gap > BURST_GAP_S = new burst)
   const bursts = [];
@@ -1305,7 +1318,7 @@ function detectShots(P, toSec) {
     burstCount:  bursts.length,
     overallAvgBps,
     overallPeakBps,
-    config: { FW_ARMED_RPM, DIP_ENTER_RATIO, DIP_REBOUND_RATIO, MIN_SHOT_GAP_S, BURST_GAP_S, PEAK_WINDOW_S },
+    config: { FW_ARMED_RPM, DIP_ENTER_RATIO, DIP_REBOUND_RATIO, MIN_DIP_DURATION_S, MIN_SHOT_GAP_S, BURST_GAP_S, PEAK_WINDOW_S },
     signals: { kv, ksp, fw, fwsp }
   };
 }
@@ -1329,10 +1342,11 @@ function renderShots(panel, P, toSec) {
     <div class="info-banner" style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:6px;padding:10px 14px;margin:10px 0;font-size:12px;color:#cbd5e1;line-height:1.5">
       <strong style="color:#eab308">🏀 How ball counting works:</strong>
       We watch for dips in the <strong>kicker velocity</strong> while the <strong>flywheel is armed</strong>
-      (target &gt; ${config.FW_ARMED_RPM} RPM). A dip of ≥${(config.DIP_ENTER_RATIO*100).toFixed(0)}% below the kicker's
-      setpoint starts tracking; the shot is committed at the dip's <em>minimum</em> once velocity rebounds
-      ≥${(config.DIP_REBOUND_RATIO*100).toFixed(0)}% (this handles fast-fire bursts where velocity never fully recovers).
-      Shots within ${config.BURST_GAP_S.toFixed(1)}s of each other form a <strong>burst</strong>. Peak BPS = most balls inside any rolling ${config.PEAK_WINDOW_S.toFixed(1)}s window.
+      (target &gt; ${config.FW_ARMED_RPM} RPM). A prominence-based peak finder counts a ball whenever the
+      velocity drops ≥${(config.DIP_ENTER_RATIO*100).toFixed(0)}% below setpoint <em>and</em> rebounds
+      ≥${(config.DIP_REBOUND_RATIO*100).toFixed(0)}% on both sides, <em>and</em> the dip lasts at least
+      ${(config.MIN_DIP_DURATION_S*1000).toFixed(0)}ms (this rejects PID ringing). Shots within ${config.BURST_GAP_S.toFixed(1)}s
+      of each other form a <strong>burst</strong>. Peak BPS = most balls inside any rolling ${config.PEAK_WINDOW_S.toFixed(1)}s window.
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="label">Total Balls Shot</div><div class="value">${totalShots} <span class="unit">balls</span></div></div>

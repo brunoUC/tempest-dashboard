@@ -1180,13 +1180,41 @@ function detectShots(P, toSec) {
   const MIN_DIP_DURATION_S = 0.015; // dip must be sustained ≥15ms — filters out PID ringing / single-sample spikes
   const BURST_GAP_S       = 1.0;   // gap > 1s opens a new burst
   const PEAK_WINDOW_S     = 1.0;   // rolling window for peak balls-per-second
+  // Flywheel cross-validation: a real ball loads the flywheel too, causing a small RPM dip.
+  // PID ringing in the kicker rarely couples to the high-inertia flywheel.
+  const FW_CROSS_CHECK    = true;  // require coincident flywheel dip to confirm a kicker peak
+  const FW_DIP_RATIO      = 0.008; // flywheel must drop ≥0.8% below its target within the window
+  const FW_WINDOW_S       = 0.12;  // ±120ms around kicker peak to look for flywheel dip
 
   const shots = [];
+  let rejectedByFlywheel = 0;
+
+  // Flywheel cross-check: scan actual flywheel samples around time `t` and return max dip
+  // (target-|v|)/target, using the flywheel setpoint at `t` as the reference. Returns 0
+  // when there is no setpoint or the window has no samples.
+  function fwMaxDipAt(t) {
+    if (!fw || !fw.times.length) return 0;
+    const spRef = fwsp ? interp(fwsp, t) : interp(fw, t);
+    const spAbs = Math.abs(spRef || 0);
+    if (spAbs < FW_ARMED_RPM) return 0;
+    // Find first index with time >= t - FW_WINDOW_S via binary search
+    const T = fw.times, V = fw.values;
+    const tLo = t - FW_WINDOW_S, tHi = t + FW_WINDOW_S;
+    let lo = 0, hi = T.length - 1;
+    while (hi - lo > 1) { const m = (lo+hi)>>1; if (T[m] < tLo) lo = m; else hi = m; }
+    let maxDip = 0;
+    for (let i = hi; i < T.length && T[i] <= tHi; i++) {
+      const dip = (spAbs - Math.abs(V[i])) / spAbs;
+      if (dip > maxDip) maxDip = dip;
+    }
+    return maxDip;
+  }
 
   // Prominence-based peak finder on the "below" signal (below = (target - |v|)/target).
   // A ball = a local maximum in `below` where:
   //   (1) peak height ≥ DIP_ENTER_RATIO  (absolute dip depth)
   //   (2) peak has prominence ≥ DIP_REBOUND_RATIO on both sides (rise from valley AND fall from peak)
+  //   (3) (optional) flywheel also shows a small coincident dip (cross-validation)
   // This correctly counts fast-fire bursts where velocity oscillates without fully recovering,
   // because each new rise-and-fall of `below` (= new ball) is its own peak.
   let phase = 'SEARCH_PEAK'; // SEARCH_PEAK: tracking valley, waiting for rise | IN_PEAK: tracking max, waiting for fall
@@ -1200,6 +1228,14 @@ function detectShots(P, toSec) {
   function commit(meta) {
     if (!meta) return;
     if (meta.t - lastCommittedT < MIN_SHOT_GAP_S) return;
+    if (FW_CROSS_CHECK) {
+      const fwDip = fwMaxDipAt(meta.t);
+      if (fwDip < FW_DIP_RATIO) {
+        rejectedByFlywheel++;
+        return; // no coincident flywheel dip → likely PID ringing, not a real ball
+      }
+      meta.fwDipRatio = fwDip;
+    }
     shots.push(meta);
     lastCommittedT = meta.t;
   }
@@ -1318,7 +1354,8 @@ function detectShots(P, toSec) {
     burstCount:  bursts.length,
     overallAvgBps,
     overallPeakBps,
-    config: { FW_ARMED_RPM, DIP_ENTER_RATIO, DIP_REBOUND_RATIO, MIN_DIP_DURATION_S, MIN_SHOT_GAP_S, BURST_GAP_S, PEAK_WINDOW_S },
+    rejectedByFlywheel,
+    config: { FW_ARMED_RPM, DIP_ENTER_RATIO, DIP_REBOUND_RATIO, MIN_DIP_DURATION_S, MIN_SHOT_GAP_S, BURST_GAP_S, PEAK_WINDOW_S, FW_CROSS_CHECK, FW_DIP_RATIO, FW_WINDOW_S },
     signals: { kv, ksp, fw, fwsp }
   };
 }
@@ -1345,8 +1382,10 @@ function renderShots(panel, P, toSec) {
       (target &gt; ${config.FW_ARMED_RPM} RPM). A prominence-based peak finder counts a ball whenever the
       velocity drops ≥${(config.DIP_ENTER_RATIO*100).toFixed(0)}% below setpoint <em>and</em> rebounds
       ≥${(config.DIP_REBOUND_RATIO*100).toFixed(0)}% on both sides, <em>and</em> the dip lasts at least
-      ${(config.MIN_DIP_DURATION_S*1000).toFixed(0)}ms (this rejects PID ringing). Shots within ${config.BURST_GAP_S.toFixed(1)}s
-      of each other form a <strong>burst</strong>. Peak BPS = most balls inside any rolling ${config.PEAK_WINDOW_S.toFixed(1)}s window.
+      ${(config.MIN_DIP_DURATION_S*1000).toFixed(0)}ms${config.FW_CROSS_CHECK ? `, <em>and</em> the <strong>flywheel</strong> also shows a ≥${(config.FW_DIP_RATIO*100).toFixed(1)}% dip within ±${(config.FW_WINDOW_S*1000).toFixed(0)}ms (cross-validation against PID ringing)` : ''}.
+      Shots within ${config.BURST_GAP_S.toFixed(1)}s of each other form a <strong>burst</strong>.
+      Peak BPS = most balls inside any rolling ${config.PEAK_WINDOW_S.toFixed(1)}s window.
+      ${res.rejectedByFlywheel ? `<br><span style="color:#94a3b8;font-size:11px">ℹ️ ${res.rejectedByFlywheel} candidate dip(s) rejected — no coincident flywheel drop.</span>` : ''}
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="label">Total Balls Shot</div><div class="value">${totalShots} <span class="unit">balls</span></div></div>

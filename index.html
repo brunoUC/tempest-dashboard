@@ -368,6 +368,23 @@ const SUBSYSTEM_COLORS={'Drivetrain':'#3b82f6','Shooter':'#ef4444','Turret':'#a7
 // ============== HELPERS ==============
 function dsMax(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const a=Math.floor(i*s),b=Math.min(Math.floor((i+1)*s),t.length);let mx=-Infinity,mi=a;for(let j=a;j<b;j++)if(v[j]>mx){mx=v[j];mi=j;}rt.push(t[mi]);rv.push(mx);}return{times:rt,values:rv};}
 function ds(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const idx=Math.floor(i*s);rt.push(t[idx]);rv.push(v[idx]);}return{times:rt,values:rv};}
+// Min+max-preserving downsample: emits up to 2 points per bucket (min and max, time-ordered).
+// Use this when dips matter (ball detection flywheel/kicker traces) — plain dsMax erases them.
+function dsMinMax(t,v,n){
+  if(t.length<=n)return{times:t,values:v};
+  const buckets=Math.max(2,Math.floor(n/2));
+  const s=t.length/buckets, rt=[], rv=[];
+  for(let i=0;i<buckets;i++){
+    const a=Math.floor(i*s), b=Math.min(Math.floor((i+1)*s),t.length);
+    if(b<=a) continue;
+    let mn=Infinity, mx=-Infinity, mni=a, mxi=a;
+    for(let j=a;j<b;j++){const x=v[j]; if(x<mn){mn=x;mni=j;} if(x>mx){mx=x;mxi=j;}}
+    if(mni===mxi){ rt.push(t[mni]); rv.push(v[mni]); }
+    else if(mni<mxi){ rt.push(t[mni]); rv.push(v[mni]); rt.push(t[mxi]); rv.push(v[mxi]); }
+    else { rt.push(t[mxi]); rv.push(v[mxi]); rt.push(t[mni]); rv.push(v[mni]); }
+  }
+  return{times:rt,values:rv};
+}
 
 // Resample a time series onto a uniform time grid using sample-and-hold
 function resampleOnGrid(times, values, grid) {
@@ -1172,34 +1189,33 @@ function detectShots(P, toSec) {
   const fw   = ts(fwV);
   const fwsp = fwSp ? ts(fwSp) : null;
 
-  // Tunables — balance: too loose picks up PID ringing as shots; too tight misses fast-fire balls.
-  const FW_ARMED_RPM      = 500;   // flywheel target (or actual) must exceed this to count as "shooting"
-  const DIP_ENTER_RATIO   = 0.15;  // peak must be ≥15% of target below setpoint (absolute depth)
-  const DIP_REBOUND_RATIO = 0.06;  // prominence: peak must rise ≥6% from valley AND fall ≥6% on the way down
-  const MIN_SHOT_GAP_S    = 0.06;  // refractory period between ball detections
-  const MIN_DIP_DURATION_S = 0.015; // dip must be sustained ≥15ms — filters out PID ringing / single-sample spikes
+  // Tunables — FLYWHEEL is the primary signal (clean, well-shaped dips).
+  // Kicker dips are deeper but noisy (PID ringing) — used only for corroboration.
+  const FW_ARMED_RPM      = 500;   // flywheel target must exceed this to count as "shooting"
+  const DIP_ENTER_RATIO   = 0.04;  // flywheel must drop ≥4% of target (AdvantageScope shows 10-18% real dips)
+  const DIP_REBOUND_RATIO = 0.015; // prominence: ≥1.5% rise from valley AND fall from peak
+  const MIN_SHOT_GAP_S    = 0.08;  // refractory period between ball detections (flywheel dip is slower than kicker)
+  const MIN_DIP_DURATION_S = 0.02; // dip must be sustained ≥20ms
   const BURST_GAP_S       = 1.0;   // gap > 1s opens a new burst
   const PEAK_WINDOW_S     = 1.0;   // rolling window for peak balls-per-second
-  // Flywheel cross-validation: a real ball loads the flywheel too, causing a small RPM dip.
-  // PID ringing in the kicker rarely couples to the high-inertia flywheel.
-  const FW_CROSS_CHECK    = true;  // require coincident flywheel dip to confirm a kicker peak
-  const FW_DIP_RATIO      = 0.008; // flywheel must drop ≥0.8% below its target within the window
-  const FW_WINDOW_S       = 0.12;  // ±120ms around kicker peak to look for flywheel dip
+  // Kicker cross-validation: a real ball also loads the kicker, which dips sharply.
+  // If the kicker did NOT dip near the flywheel peak, the flywheel blip was noise.
+  const KICK_CROSS_CHECK  = true;
+  const KICK_DIP_RATIO    = 0.05;  // kicker must drop ≥5% below its target within the window
+  const KICK_WINDOW_S     = 0.15;  // ±150ms (kicker dip can slightly precede flywheel dip)
 
   const shots = [];
-  let rejectedByFlywheel = 0;
+  let rejectedByKicker = 0;
 
-  // Flywheel cross-check: scan actual flywheel samples around time `t` and return max dip
-  // (target-|v|)/target, using the flywheel setpoint at `t` as the reference. Returns 0
-  // when there is no setpoint or the window has no samples.
-  function fwMaxDipAt(t) {
-    if (!fw || !fw.times.length) return 0;
-    const spRef = fwsp ? interp(fwsp, t) : interp(fw, t);
+  // Kicker cross-check: scan kicker samples around time `t` and return max dip
+  // (target-|v|)/target. Returns 0 when there is no setpoint or the window has no samples.
+  function kickMaxDipAt(t) {
+    if (!kv || !kv.times.length) return 0;
+    const spRef = ksp ? interp(ksp, t) : null;
     const spAbs = Math.abs(spRef || 0);
-    if (spAbs < FW_ARMED_RPM) return 0;
-    // Find first index with time >= t - FW_WINDOW_S via binary search
-    const T = fw.times, V = fw.values;
-    const tLo = t - FW_WINDOW_S, tHi = t + FW_WINDOW_S;
+    if (spAbs < 1) return 0;
+    const T = kv.times, V = kv.values;
+    const tLo = t - KICK_WINDOW_S, tHi = t + KICK_WINDOW_S;
     let lo = 0, hi = T.length - 1;
     while (hi - lo > 1) { const m = (lo+hi)>>1; if (T[m] < tLo) lo = m; else hi = m; }
     let maxDip = 0;
@@ -1210,51 +1226,49 @@ function detectShots(P, toSec) {
     return maxDip;
   }
 
-  // Prominence-based peak finder on the "below" signal (below = (target - |v|)/target).
+  // Prominence-based peak finder on the FLYWHEEL "below" signal (below = (target - |v|)/target).
   // A ball = a local maximum in `below` where:
-  //   (1) peak height ≥ DIP_ENTER_RATIO  (absolute dip depth)
-  //   (2) peak has prominence ≥ DIP_REBOUND_RATIO on both sides (rise from valley AND fall from peak)
-  //   (3) (optional) flywheel also shows a small coincident dip (cross-validation)
-  // This correctly counts fast-fire bursts where velocity oscillates without fully recovering,
-  // because each new rise-and-fall of `below` (= new ball) is its own peak.
-  let phase = 'SEARCH_PEAK'; // SEARCH_PEAK: tracking valley, waiting for rise | IN_PEAK: tracking max, waiting for fall
+  //   (1) peak height ≥ DIP_ENTER_RATIO  (absolute dip depth, flywheel)
+  //   (2) peak has prominence ≥ DIP_REBOUND_RATIO on both sides
+  //   (3) dip sustained ≥ MIN_DIP_DURATION_S
+  //   (4) (optional) kicker also dipped in the same window (cross-validation)
+  // Flywheel is preferred because its dips are cleaner and better-shaped than kicker —
+  // the heavy inertia acts as a low-pass filter that rejects PID ringing.
+  let phase = 'SEARCH_PEAK';
   let valleyVal = 0;
   let peakVal = 0;
   let peakMeta = null;
-  let peakEnterT = 0; // when we entered IN_PEAK (for min-duration check)
+  let peakEnterT = 0;
   let lastCommittedT = -Infinity;
   let wasArmed = false;
 
   function commit(meta) {
     if (!meta) return;
     if (meta.t - lastCommittedT < MIN_SHOT_GAP_S) return;
-    if (FW_CROSS_CHECK) {
-      const fwDip = fwMaxDipAt(meta.t);
-      if (fwDip < FW_DIP_RATIO) {
-        rejectedByFlywheel++;
-        return; // no coincident flywheel dip → likely PID ringing, not a real ball
+    if (KICK_CROSS_CHECK) {
+      const kDip = kickMaxDipAt(meta.t);
+      if (kDip < KICK_DIP_RATIO) {
+        rejectedByKicker++;
+        return; // flywheel blipped but kicker didn't → noise / flywheel ringing, not a ball
       }
-      meta.fwDipRatio = fwDip;
+      meta.kickerDipRatio = kDip;
     }
     shots.push(meta);
     lastCommittedT = meta.t;
   }
 
-  for (let i=0; i<kv.times.length; i++) {
-    const t = kv.times[i];
-    const v = kv.values[i];
-    const kspVal  = ksp  ? interp(ksp,  t) : null;
+  // Drive the loop from the FLYWHEEL sample stream (primary detection signal).
+  for (let i=0; i<fw.times.length; i++) {
+    const t = fw.times[i];
+    const v = fw.values[i];
     const fwspVal = fwsp ? interp(fwsp, t) : null;
-    const fwVal   = interp(fw, t);
+    const kspVal  = ksp  ? interp(ksp,  t) : null;
+    const kvVal   = interp(kv, t);
 
-    const fwArmed = fwspVal!=null
-      ? Math.abs(fwspVal) > FW_ARMED_RPM
-      : (fwVal!=null && Math.abs(fwVal) > FW_ARMED_RPM);
-    const kTarget = kspVal!=null ? Math.abs(kspVal) : 0;
-    const armed   = fwArmed && kTarget >= 1;
+    const fwTarget = fwspVal!=null ? Math.abs(fwspVal) : 0;
+    const armed    = fwTarget > FW_ARMED_RPM && (kspVal==null || Math.abs(kspVal) >= 1);
 
     if (!armed) {
-      // Entering disarmed: flush in-progress peak only if it satisfied the duration requirement
       if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO
           && peakMeta && (peakMeta.t - peakEnterT) >= MIN_DIP_DURATION_S) {
         commit(peakMeta);
@@ -1266,39 +1280,33 @@ function detectShots(P, toSec) {
     }
 
     const absV = Math.abs(v);
-    const b    = Math.max(0, (kTarget - absV) / kTarget);
+    const b    = Math.max(0, (fwTarget - absV) / fwTarget);
 
-    // Just transitioned armed → initialize valley to current b so we measure rises from here
     if (!wasArmed) { valleyVal = b; wasArmed = true; }
 
     if (phase === 'SEARCH_PEAK') {
       if (b < valleyVal) valleyVal = b;
-      // Begin a peak when signal rises meaningfully above the valley AND is deep enough overall
       if (b >= DIP_ENTER_RATIO && b >= valleyVal + DIP_REBOUND_RATIO) {
         phase = 'IN_PEAK';
         peakVal = b;
-        peakMeta = { t, kickerVel:absV, kickerTarget:kTarget, flywheelVel:fwVal, flywheelTarget:fwspVal };
+        peakMeta = { t, flywheelVel:absV, flywheelTarget:fwTarget, kickerVel:kvVal, kickerTarget:kspVal!=null?Math.abs(kspVal):null };
         peakEnterT = t;
       }
     } else { // IN_PEAK
       if (b > peakVal) {
         peakVal = b;
-        peakMeta = { t, kickerVel:absV, kickerTarget:kTarget, flywheelVel:fwVal, flywheelTarget:fwspVal };
+        peakMeta = { t, flywheelVel:absV, flywheelTarget:fwTarget, kickerVel:kvVal, kickerTarget:kspVal!=null?Math.abs(kspVal):null };
       } else if (peakVal - b >= DIP_REBOUND_RATIO) {
-        // Peak confirmed by the required prominence — but also require the whole dip was sustained
-        // long enough to be a real ball (filters PID ringing / single-sample spikes).
         const dipDuration = t - peakEnterT;
         if (dipDuration >= MIN_DIP_DURATION_S) {
           commit(peakMeta);
         }
-        // Reset for next peak: current `b` is the new baseline valley
         phase = 'SEARCH_PEAK';
         valleyVal = b;
         peakVal = 0; peakMeta = null;
       }
     }
   }
-  // Flush any dangling peak at end of log (with duration check)
   if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO
       && peakMeta && (peakMeta.t - peakEnterT) >= MIN_DIP_DURATION_S) {
     commit(peakMeta);
@@ -1354,8 +1362,8 @@ function detectShots(P, toSec) {
     burstCount:  bursts.length,
     overallAvgBps,
     overallPeakBps,
-    rejectedByFlywheel,
-    config: { FW_ARMED_RPM, DIP_ENTER_RATIO, DIP_REBOUND_RATIO, MIN_DIP_DURATION_S, MIN_SHOT_GAP_S, BURST_GAP_S, PEAK_WINDOW_S, FW_CROSS_CHECK, FW_DIP_RATIO, FW_WINDOW_S },
+    rejectedByKicker,
+    config: { FW_ARMED_RPM, DIP_ENTER_RATIO, DIP_REBOUND_RATIO, MIN_DIP_DURATION_S, MIN_SHOT_GAP_S, BURST_GAP_S, PEAK_WINDOW_S, KICK_CROSS_CHECK, KICK_DIP_RATIO, KICK_WINDOW_S },
     signals: { kv, ksp, fw, fwsp }
   };
 }
@@ -1378,14 +1386,15 @@ function renderShots(panel, P, toSec) {
   panel.innerHTML = `
     <div class="info-banner" style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:6px;padding:10px 14px;margin:10px 0;font-size:12px;color:#cbd5e1;line-height:1.5">
       <strong style="color:#eab308">🏀 How ball counting works:</strong>
-      We watch for dips in the <strong>kicker velocity</strong> while the <strong>flywheel is armed</strong>
-      (target &gt; ${config.FW_ARMED_RPM} RPM). A prominence-based peak finder counts a ball whenever the
-      velocity drops ≥${(config.DIP_ENTER_RATIO*100).toFixed(0)}% below setpoint <em>and</em> rebounds
-      ≥${(config.DIP_REBOUND_RATIO*100).toFixed(0)}% on both sides, <em>and</em> the dip lasts at least
-      ${(config.MIN_DIP_DURATION_S*1000).toFixed(0)}ms${config.FW_CROSS_CHECK ? `, <em>and</em> the <strong>flywheel</strong> also shows a ≥${(config.FW_DIP_RATIO*100).toFixed(1)}% dip within ±${(config.FW_WINDOW_S*1000).toFixed(0)}ms (cross-validation against PID ringing)` : ''}.
+      We watch for dips in the <strong>flywheel velocity</strong> while it's armed
+      (target &gt; ${config.FW_ARMED_RPM} RPM). The flywheel's heavy inertia filters out PID noise,
+      so its dip signature is very clean. A prominence-based peak finder counts a ball whenever the
+      flywheel drops ≥${(config.DIP_ENTER_RATIO*100).toFixed(1)}% below setpoint <em>and</em> rebounds
+      ≥${(config.DIP_REBOUND_RATIO*100).toFixed(1)}% on both sides, <em>and</em> the dip lasts at least
+      ${(config.MIN_DIP_DURATION_S*1000).toFixed(0)}ms${config.KICK_CROSS_CHECK ? `, <em>and</em> the <strong>kicker</strong> also shows a ≥${(config.KICK_DIP_RATIO*100).toFixed(0)}% dip within ±${(config.KICK_WINDOW_S*1000).toFixed(0)}ms (cross-validation)` : ''}.
       Shots within ${config.BURST_GAP_S.toFixed(1)}s of each other form a <strong>burst</strong>.
       Peak BPS = most balls inside any rolling ${config.PEAK_WINDOW_S.toFixed(1)}s window.
-      ${res.rejectedByFlywheel ? `<br><span style="color:#94a3b8;font-size:11px">ℹ️ ${res.rejectedByFlywheel} candidate dip(s) rejected — no coincident flywheel drop.</span>` : ''}
+      ${res.rejectedByKicker ? `<br><span style="color:#94a3b8;font-size:11px">ℹ️ ${res.rejectedByKicker} candidate dip(s) rejected — no coincident kicker drop.</span>` : ''}
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="label">Total Balls Shot</div><div class="value">${totalShots} <span class="unit">balls</span></div></div>
@@ -1400,12 +1409,19 @@ function renderShots(panel, P, toSec) {
         <tbody id="burstTable"></tbody>
       </table>
     </div>
-    <div class="section-title">Kicker Velocity with Detected Shots</div>
-    <div class="chart-box"><h3>Kicker velocity (abs), setpoint, and shot markers</h3><canvas id="shotsChart"></canvas>
+    <div class="section-title">Flywheel Velocity with Detected Shots</div>
+    <div class="chart-box"><h3>Flywheel velocity (RPM), setpoint, and shot markers</h3><canvas id="shotsChart"></canvas>
+      <div class="legend">
+        <span><div class="dot" style="background:#ef4444"></div>Flywheel velocity</span>
+        <span><div class="dot" style="background:#94a3b8"></div>Flywheel setpoint</span>
+        <span><div class="dot" style="background:#f87171;border-radius:50%;width:10px;height:10px;border:1.5px solid #fff"></div>Shot detected (numbered)</span>
+      </div>
+    </div>
+    <div class="section-title">Kicker Velocity (Cross-validation)</div>
+    <div class="chart-box"><h3>Kicker velocity (abs) and setpoint — must dip alongside flywheel for a shot to count</h3><canvas id="kickerShotsChart"></canvas>
       <div class="legend">
         <span><div class="dot" style="background:#eab308"></div>Kicker velocity</span>
         <span><div class="dot" style="background:#94a3b8"></div>Kicker setpoint</span>
-        <span><div class="dot" style="background:#ef4444;border-radius:50%;width:10px;height:10px"></div>Shot detected (numbered)</span>
       </div>
     </div>
   `;
@@ -1428,51 +1444,48 @@ function renderShots(panel, P, toSec) {
     }).join('');
   }
 
-  // Chart — kicker velocity (abs) + setpoint (abs) + shot markers as scatter points w/ numbers
-  // Use scatter chart with {x,y} points so shot markers share the same X axis as the traces.
-  const kvAbs  = { times: signals.kv.times,  values: signals.kv.values.map(v => Math.abs(v)) };
-  const kspAbs = signals.ksp ? { times: signals.ksp.times, values: signals.ksp.values.map(v => Math.abs(v)) } : null;
+  // PRIMARY chart — flywheel velocity + setpoint + shot markers. Use min-preserving
+  // downsample so dips stay visible on the chart (plain dsMax would erase them).
+  const fwAbs    = { times: signals.fw.times,   values: signals.fw.values.map(v => Math.abs(v)) };
+  const fwspAbs  = signals.fwsp ? { times: signals.fwsp.times, values: signals.fwsp.values.map(v => Math.abs(v)) } : null;
 
-  const kvDs   = dsMax(kvAbs.times, kvAbs.values, MAX_PTS);
-  const kspDs  = kspAbs ? dsMax(kspAbs.times, kspAbs.values, MAX_PTS) : null;
+  const fwDs     = dsMinMax(fwAbs.times, fwAbs.values, MAX_PTS);
+  const fwspDs   = fwspAbs ? dsMax(fwspAbs.times, fwspAbs.values, MAX_PTS) : null;
 
-  // Convert downsampled series to {x,y} form
-  const kvPoints   = kvDs.times.map((t,i)  => ({ x: +t.toFixed(3), y: kvDs.values[i] }));
-  const kspPoints  = kspDs ? kspDs.times.map((t,i) => ({ x: +t.toFixed(3), y: kspDs.values[i] })) : null;
-  // Shot markers: plot each shot as a point at (shot time, kicker velocity at dip minimum)
-  const shotPoints = shots.map((s,i) => ({ x: +s.t.toFixed(3), y: s.kickerVel, idx: i+1 }));
+  const fwPoints    = fwDs.times.map((t,i)   => ({ x: +t.toFixed(3), y: fwDs.values[i] }));
+  const fwspPoints  = fwspDs ? fwspDs.times.map((t,i) => ({ x: +t.toFixed(3), y: fwspDs.values[i] })) : null;
+  // Shot markers: plot each shot at (shot time, flywheel velocity at dip minimum)
+  const shotPoints  = shots.map((s,i) => ({ x: +s.t.toFixed(3), y: s.flywheelVel, idx: i+1 }));
 
   const datasets = [
     {
-      type:'line', label:'Kicker velocity', data: kvPoints,
-      borderColor:'#eab308', backgroundColor:'rgba(234,179,8,0.08)',
-      borderWidth:1.5, pointRadius:0, tension:0.1, fill:false,
+      type:'line', label:'Flywheel velocity', data: fwPoints,
+      borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.06)',
+      borderWidth:1.2, pointRadius:0, tension:0, fill:false,
       parsing:false, showLine:true
     }
   ];
-  if (kspPoints) {
+  if (fwspPoints) {
     datasets.push({
-      type:'line', label:'Kicker setpoint', data: kspPoints,
+      type:'line', label:'Flywheel setpoint', data: fwspPoints,
       borderColor:'#94a3b8', borderWidth:1.2, borderDash:[6,3], pointRadius:0, tension:0,
       parsing:false, showLine:true, stepped:true
     });
   }
   datasets.push({
     type:'scatter', label:'Shot detected', data: shotPoints,
-    pointBackgroundColor:'#ef4444', pointBorderColor:'#fff', pointBorderWidth:1.5,
+    pointBackgroundColor:'#f87171', pointBorderColor:'#fff', pointBorderWidth:1.5,
     pointRadius:6, pointHoverRadius:8,
     parsing:false, showLine:false
   });
 
-  // datalabels-style number overlay via Chart.js 'afterDatasetsDraw' isn't available without plugin;
-  // instead we draw labels via tooltip + a small custom plugin wrapper using the annotation plugin.
   // Numbered labels: use the annotation plugin to add a label for each shot.
   const annotations = {};
   shots.forEach((s,i) => {
     annotations['shotLbl'+i] = {
       type:'label',
       xValue: +s.t.toFixed(3),
-      yValue: s.kickerVel,
+      yValue: s.flywheelVel,
       content: String(i+1),
       color:'#ffffff',
       backgroundColor:'rgba(239,68,68,0.92)',
@@ -1490,7 +1503,7 @@ function renderShots(panel, P, toSec) {
     options: {
       scales: {
         x: { type:'linear', ticks:{color:'#9ca3af',maxTicksLimit:20, callback:v=>v.toFixed(1)+'s'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Time (s)',color:'#9ca3af'} },
-        y: { ticks:{color:'#9ca3af'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'|velocity| (rad/s)',color:'#9ca3af'}, beginAtZero:true }
+        y: { ticks:{color:'#9ca3af'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Flywheel |velocity| (RPM)',color:'#9ca3af'} }
       },
       plugins: {
         legend: { labels: { color:'#e4e4e7', filter: item => item.text !== 'Shot detected' } },
@@ -1499,10 +1512,64 @@ function renderShots(panel, P, toSec) {
           callbacks: {
             label: (ctx) => {
               if (ctx.dataset.label === 'Shot detected') {
-                return `Shot #${ctx.raw.idx} at ${ctx.raw.x.toFixed(2)}s (v=${ctx.raw.y.toFixed(1)})`;
+                return `Shot #${ctx.raw.idx} at ${ctx.raw.x.toFixed(2)}s (RPM=${ctx.raw.y.toFixed(0)})`;
               }
-              return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} @ ${ctx.parsed.x.toFixed(2)}s`;
+              return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)} @ ${ctx.parsed.x.toFixed(2)}s`;
             }
+          }
+        }
+      }
+    }
+  });
+
+  // SECONDARY chart — kicker (cross-validation view). Uses dsMinMax too so dips are preserved.
+  const kvAbs  = { times: signals.kv.times,  values: signals.kv.values.map(v => Math.abs(v)) };
+  const kspAbs = signals.ksp ? { times: signals.ksp.times, values: signals.ksp.values.map(v => Math.abs(v)) } : null;
+  const kvDs   = dsMinMax(kvAbs.times, kvAbs.values, MAX_PTS);
+  const kspDs  = kspAbs ? dsMax(kspAbs.times, kspAbs.values, MAX_PTS) : null;
+  const kvPoints  = kvDs.times.map((t,i)  => ({ x: +t.toFixed(3), y: kvDs.values[i] }));
+  const kspPoints = kspDs ? kspDs.times.map((t,i) => ({ x: +t.toFixed(3), y: kspDs.values[i] })) : null;
+
+  const kickDatasets = [{
+    type:'line', label:'Kicker velocity', data: kvPoints,
+    borderColor:'#eab308', backgroundColor:'rgba(234,179,8,0.05)',
+    borderWidth:1.2, pointRadius:0, tension:0, fill:false,
+    parsing:false, showLine:true
+  }];
+  if (kspPoints) {
+    kickDatasets.push({
+      type:'line', label:'Kicker setpoint', data: kspPoints,
+      borderColor:'#94a3b8', borderWidth:1.2, borderDash:[6,3], pointRadius:0, tension:0,
+      parsing:false, showLine:true, stepped:true
+    });
+  }
+  // Vertical guide lines at each committed shot time for easy eyeballing
+  const kickAnnotations = {};
+  shots.forEach((s,i) => {
+    kickAnnotations['shotLine'+i] = {
+      type:'line',
+      xMin: +s.t.toFixed(3),
+      xMax: +s.t.toFixed(3),
+      borderColor: 'rgba(239,68,68,0.35)',
+      borderWidth: 1,
+      borderDash: [3,3]
+    };
+  });
+
+  mkChart(panel.querySelector('#kickerShotsChart'), {
+    type:'scatter',
+    data: { datasets: kickDatasets },
+    options: {
+      scales: {
+        x: { type:'linear', ticks:{color:'#9ca3af',maxTicksLimit:20, callback:v=>v.toFixed(1)+'s'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Time (s)',color:'#9ca3af'} },
+        y: { ticks:{color:'#9ca3af'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Kicker |velocity| (rad/s)',color:'#9ca3af'}, beginAtZero:true }
+      },
+      plugins: {
+        legend: { labels: { color:'#e4e4e7' } },
+        annotation: { annotations: kickAnnotations },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} @ ${ctx.parsed.x.toFixed(2)}s`
           }
         }
       }

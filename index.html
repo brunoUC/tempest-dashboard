@@ -339,7 +339,10 @@ function getTripTime(a,b){const p=(a/CB285_RATED)*100,c=CB285_TRIP;if(p<=c[0].pc
 
 // ============== PDH CHANNEL MAP ==============
 // Maps each PDH channel (0-19) to the motor/load name and subsystem it powers.
-const PDH_CHANNELS=[
+// Baseline wiring (pre-2026-04-18). On 2026-04-18 the spindexer gained a second motor
+// wired to PDH channel 17 (previously VRM). Logs recorded on/after that date use the
+// post-cutoff map; older logs keep channel 17 as VRM so historical data stays correct.
+const PDH_CHANNELS_BASE=[
   {ch:0, name:'Flywheel 2',        subsystem:'Shooter'},
   {ch:1, name:'Flywheel 1',        subsystem:'Shooter'},
   {ch:2, name:'Steer Back Right',  subsystem:'Drivetrain'},
@@ -361,8 +364,30 @@ const PDH_CHANNELS=[
   {ch:18,name:'Hood',              subsystem:'Shooter'},
   {ch:19,name:'Kicker',            subsystem:'Kicker'},
 ];
-const PDH_CH_MAP=new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
-const SUBSYSTEM_GROUPS=(()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
+// Cutoff: logs recorded on or after this instant use the updated wiring.
+const SPINDEXER_M2_CUTOFF_MS = new Date(2026, 3, 18, 0, 0, 0).getTime(); // local time, April 18 2026 00:00
+function buildPDHChannelsForDate(logDateMs) {
+  // logDateMs: ms-since-epoch of when the log was recorded (filename date or file mtime).
+  // Returns a channel-list variant — ch17 is 'Spindexer 2' after the cutoff, else VRM.
+  const arr = PDH_CHANNELS_BASE.map(c => ({ ...c })); // shallow copy so callers can't mutate base
+  if (logDateMs != null && logDateMs >= SPINDEXER_M2_CUTOFF_MS) {
+    const ch17 = arr.find(c => c.ch === 17);
+    if (ch17) { ch17.name = 'Spindexer 2'; ch17.subsystem = 'Spindexer'; }
+    // Distinguish the two spindexer channels on the per-channel table
+    const ch9 = arr.find(c => c.ch === 9);
+    if (ch9) ch9.name = 'Spindexer 1';
+  }
+  return arr;
+}
+// These three are mutated by applyPDHChannelsForDate() whenever a new log is loaded.
+let PDH_CHANNELS    = PDH_CHANNELS_BASE.map(c => ({ ...c }));
+let PDH_CH_MAP      = new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
+let SUBSYSTEM_GROUPS = (()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
+function applyPDHChannelsForDate(logDateMs) {
+  PDH_CHANNELS = buildPDHChannelsForDate(logDateMs);
+  PDH_CH_MAP   = new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
+  SUBSYSTEM_GROUPS = (()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
+}
 const SUBSYSTEM_COLORS={'Drivetrain':'#3b82f6','Shooter':'#ef4444','Turret':'#a78bfa','Intake Roller':'#f97316','Intake Extensor':'#fbbf24','Spindexer':'#10b981','Kicker':'#eab308','Climber':'#f43f5e','MPM':'#06b6d4','VRM':'#64748b'};
 
 // ============== HELPERS ==============
@@ -2363,6 +2388,17 @@ function buildDashboard(P,fileName,fileModified){
   if (fileModified == null && fileName && sessionLogs.has(fileName)) {
     const cached = sessionLogs.get(fileName);
     if (cached && cached.fileModified) fileModified = cached.fileModified;
+  }
+
+  // Pick the PDH channel map that matches when the log was recorded.
+  // Prefer the filename-parsed date (most accurate — records when the robot ran),
+  // fall back to file mtime, then null (→ pre-cutoff wiring).
+  {
+    const pr = fileName ? parseLogName(fileName) : null;
+    let logDateMs = null;
+    if (pr && pr.date instanceof Date && !isNaN(pr.date)) logDateMs = pr.date.getTime();
+    else if (typeof fileModified === 'number' && fileModified > 0) logDateMs = fileModified;
+    applyPDHChannelsForDate(logDateMs);
   }
 
   // Extract profile and add to history

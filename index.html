@@ -339,10 +339,7 @@ function getTripTime(a,b){const p=(a/CB285_RATED)*100,c=CB285_TRIP;if(p<=c[0].pc
 
 // ============== PDH CHANNEL MAP ==============
 // Maps each PDH channel (0-19) to the motor/load name and subsystem it powers.
-// Baseline wiring (pre-2026-04-18). On 2026-04-18 the spindexer gained a second motor
-// wired to PDH channel 17 (previously VRM). Logs recorded on/after that date use the
-// post-cutoff map; older logs keep channel 17 as VRM so historical data stays correct.
-const PDH_CHANNELS_BASE=[
+const PDH_CHANNELS=[
   {ch:0, name:'Flywheel 2',        subsystem:'Shooter'},
   {ch:1, name:'Flywheel 1',        subsystem:'Shooter'},
   {ch:2, name:'Steer Back Right',  subsystem:'Drivetrain'},
@@ -364,52 +361,13 @@ const PDH_CHANNELS_BASE=[
   {ch:18,name:'Hood',              subsystem:'Shooter'},
   {ch:19,name:'Kicker',            subsystem:'Kicker'},
 ];
-// Cutoff: logs recorded on or after this instant use the updated wiring.
-const SPINDEXER_M2_CUTOFF_MS = new Date(2026, 3, 18, 0, 0, 0).getTime(); // local time, April 18 2026 00:00
-function buildPDHChannelsForDate(logDateMs) {
-  // logDateMs: ms-since-epoch of when the log was recorded (filename date or file mtime).
-  // Returns a channel-list variant — ch17 is 'Spindexer 2' after the cutoff, else VRM.
-  const arr = PDH_CHANNELS_BASE.map(c => ({ ...c })); // shallow copy so callers can't mutate base
-  if (logDateMs != null && logDateMs >= SPINDEXER_M2_CUTOFF_MS) {
-    const ch17 = arr.find(c => c.ch === 17);
-    if (ch17) { ch17.name = 'Spindexer 2'; ch17.subsystem = 'Spindexer'; }
-    // Distinguish the two spindexer channels on the per-channel table
-    const ch9 = arr.find(c => c.ch === 9);
-    if (ch9) ch9.name = 'Spindexer 1';
-  }
-  return arr;
-}
-// These three are mutated by applyPDHChannelsForDate() whenever a new log is loaded.
-let PDH_CHANNELS    = PDH_CHANNELS_BASE.map(c => ({ ...c }));
-let PDH_CH_MAP      = new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
-let SUBSYSTEM_GROUPS = (()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
-function applyPDHChannelsForDate(logDateMs) {
-  PDH_CHANNELS = buildPDHChannelsForDate(logDateMs);
-  PDH_CH_MAP   = new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
-  SUBSYSTEM_GROUPS = (()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
-}
+const PDH_CH_MAP=new Map(PDH_CHANNELS.map(c=>[c.ch,c]));
+const SUBSYSTEM_GROUPS=(()=>{const m=new Map();PDH_CHANNELS.forEach(c=>{if(!m.has(c.subsystem))m.set(c.subsystem,[]);m.get(c.subsystem).push(c.ch);});return m;})();
 const SUBSYSTEM_COLORS={'Drivetrain':'#3b82f6','Shooter':'#ef4444','Turret':'#a78bfa','Intake Roller':'#f97316','Intake Extensor':'#fbbf24','Spindexer':'#10b981','Kicker':'#eab308','Climber':'#f43f5e','MPM':'#06b6d4','VRM':'#64748b'};
 
 // ============== HELPERS ==============
 function dsMax(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const a=Math.floor(i*s),b=Math.min(Math.floor((i+1)*s),t.length);let mx=-Infinity,mi=a;for(let j=a;j<b;j++)if(v[j]>mx){mx=v[j];mi=j;}rt.push(t[mi]);rv.push(mx);}return{times:rt,values:rv};}
 function ds(t,v,n){if(t.length<=n)return{times:t,values:v};const s=t.length/n,rt=[],rv=[];for(let i=0;i<n;i++){const idx=Math.floor(i*s);rt.push(t[idx]);rv.push(v[idx]);}return{times:rt,values:rv};}
-// Min+max-preserving downsample: emits up to 2 points per bucket (min and max, time-ordered).
-// Use this when dips matter (ball detection flywheel/kicker traces) — plain dsMax erases them.
-function dsMinMax(t,v,n){
-  if(t.length<=n)return{times:t,values:v};
-  const buckets=Math.max(2,Math.floor(n/2));
-  const s=t.length/buckets, rt=[], rv=[];
-  for(let i=0;i<buckets;i++){
-    const a=Math.floor(i*s), b=Math.min(Math.floor((i+1)*s),t.length);
-    if(b<=a) continue;
-    let mn=Infinity, mx=-Infinity, mni=a, mxi=a;
-    for(let j=a;j<b;j++){const x=v[j]; if(x<mn){mn=x;mni=j;} if(x>mx){mx=x;mxi=j;}}
-    if(mni===mxi){ rt.push(t[mni]); rv.push(v[mni]); }
-    else if(mni<mxi){ rt.push(t[mni]); rv.push(v[mni]); rt.push(t[mxi]); rv.push(v[mxi]); }
-    else { rt.push(t[mxi]); rv.push(v[mxi]); rt.push(t[mni]); rv.push(v[mni]); }
-  }
-  return{times:rt,values:rv};
-}
 
 // Resample a time series onto a uniform time grid using sample-and-hold
 function resampleOnGrid(times, values, grid) {
@@ -1184,424 +1142,6 @@ function renderShooterReady(panel, P, toSec) {
   renderDiscreteTimeline(panel.querySelector('#shooterReadyTimeline'), rows, minT, maxT);
 }
 
-// ============== SHOT DETECTION (BALL COUNTER) ==============
-// Idea: every ball that passes through the shooter briefly loads both the kicker
-// (low inertia, sharp dip) and the flywheel (high inertia, smaller dip). We look
-// for dips in kicker velocity below its setpoint while the shooter is "armed"
-// (flywheel commanded at shooting speed). Each dip == one ball.
-function detectShots(P, toSec) {
-  const kV   = P.get('/Subsystems/Kicker/KickerVelocity');
-  const kSp  = P.get('/Subsystems/Kicker/KickerSetpoint');
-  const fwV  = P.get('/Subsystems/Shooter/FlyWheels//CurrentVelocity');
-  const fwSp = P.get('/Subsystems/Shooter/FlyWheels//TargetVelocity');
-
-  if (!kV || !kV.data.length) return { available:false, reason:'No kicker velocity data' };
-  if (!fwV || !fwV.data.length) return { available:false, reason:'No flywheel velocity data' };
-
-  function ts(e){ return { times:e.data.map(r=>toSec(r.timestamp)), values:e.data.map(r=>Number(r.value)||0) }; }
-  function interp(s, t){
-    if (!s || !s.times.length) return null;
-    const T=s.times, V=s.values;
-    if (t<=T[0]) return V[0];
-    if (t>=T[T.length-1]) return V[V.length-1];
-    let lo=0, hi=T.length-1;
-    while(hi-lo>1){const m=(lo+hi)>>1; if(T[m]<=t) lo=m; else hi=m;}
-    return V[lo]; // step (latest known) — setpoints/velocities are stepwise in log
-  }
-
-  const kv   = ts(kV);
-  const ksp  = kSp  ? ts(kSp)  : null;
-  const fw   = ts(fwV);
-  const fwsp = fwSp ? ts(fwSp) : null;
-
-  // Tunables — FLYWHEEL is the primary signal (clean, well-shaped dips).
-  // Kicker dips are deeper but noisy (PID ringing) — used only for corroboration.
-  const FW_ARMED_RPM      = 500;   // flywheel target must exceed this to count as "shooting"
-  const DIP_ENTER_RATIO   = 0.04;  // flywheel must drop ≥4% of target (AdvantageScope shows 10-18% real dips)
-  const DIP_REBOUND_RATIO = 0.015; // prominence: ≥1.5% rise from valley AND fall from peak
-  const MIN_SHOT_GAP_S    = 0.08;  // refractory period between ball detections (flywheel dip is slower than kicker)
-  const MIN_DIP_DURATION_S = 0.02; // dip must be sustained ≥20ms
-  const BURST_GAP_S       = 1.0;   // gap > 1s opens a new burst
-  const PEAK_WINDOW_S     = 1.0;   // rolling window for peak balls-per-second
-  // Kicker cross-validation: a real ball also loads the kicker, which dips sharply.
-  // If the kicker did NOT dip near the flywheel peak, the flywheel blip was noise.
-  const KICK_CROSS_CHECK  = true;
-  const KICK_DIP_RATIO    = 0.05;  // kicker must drop ≥5% below its target within the window
-  const KICK_WINDOW_S     = 0.15;  // ±150ms (kicker dip can slightly precede flywheel dip)
-
-  const shots = [];
-  let rejectedByKicker = 0;
-
-  // Kicker cross-check: scan kicker samples around time `t` and return max dip
-  // (target-|v|)/target. Returns 0 when there is no setpoint or the window has no samples.
-  function kickMaxDipAt(t) {
-    if (!kv || !kv.times.length) return 0;
-    const spRef = ksp ? interp(ksp, t) : null;
-    const spAbs = Math.abs(spRef || 0);
-    if (spAbs < 1) return 0;
-    const T = kv.times, V = kv.values;
-    const tLo = t - KICK_WINDOW_S, tHi = t + KICK_WINDOW_S;
-    let lo = 0, hi = T.length - 1;
-    while (hi - lo > 1) { const m = (lo+hi)>>1; if (T[m] < tLo) lo = m; else hi = m; }
-    let maxDip = 0;
-    for (let i = hi; i < T.length && T[i] <= tHi; i++) {
-      const dip = (spAbs - Math.abs(V[i])) / spAbs;
-      if (dip > maxDip) maxDip = dip;
-    }
-    return maxDip;
-  }
-
-  // Prominence-based peak finder on the FLYWHEEL "below" signal (below = (target - |v|)/target).
-  // A ball = a local maximum in `below` where:
-  //   (1) peak height ≥ DIP_ENTER_RATIO  (absolute dip depth, flywheel)
-  //   (2) peak has prominence ≥ DIP_REBOUND_RATIO on both sides
-  //   (3) dip sustained ≥ MIN_DIP_DURATION_S
-  //   (4) (optional) kicker also dipped in the same window (cross-validation)
-  // Flywheel is preferred because its dips are cleaner and better-shaped than kicker —
-  // the heavy inertia acts as a low-pass filter that rejects PID ringing.
-  let phase = 'SEARCH_PEAK';
-  let valleyVal = 0;
-  let peakVal = 0;
-  let peakMeta = null;
-  let peakEnterT = 0;
-  let lastCommittedT = -Infinity;
-  let wasArmed = false;
-
-  function commit(meta) {
-    if (!meta) return;
-    if (meta.t - lastCommittedT < MIN_SHOT_GAP_S) return;
-    if (KICK_CROSS_CHECK) {
-      const kDip = kickMaxDipAt(meta.t);
-      if (kDip < KICK_DIP_RATIO) {
-        rejectedByKicker++;
-        return; // flywheel blipped but kicker didn't → noise / flywheel ringing, not a ball
-      }
-      meta.kickerDipRatio = kDip;
-    }
-    shots.push(meta);
-    lastCommittedT = meta.t;
-  }
-
-  // Drive the loop from the FLYWHEEL sample stream (primary detection signal).
-  for (let i=0; i<fw.times.length; i++) {
-    const t = fw.times[i];
-    const v = fw.values[i];
-    const fwspVal = fwsp ? interp(fwsp, t) : null;
-    const kspVal  = ksp  ? interp(ksp,  t) : null;
-    const kvVal   = interp(kv, t);
-
-    const fwTarget = fwspVal!=null ? Math.abs(fwspVal) : 0;
-    const armed    = fwTarget > FW_ARMED_RPM && (kspVal==null || Math.abs(kspVal) >= 1);
-
-    if (!armed) {
-      if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO
-          && peakMeta && (peakMeta.t - peakEnterT) >= MIN_DIP_DURATION_S) {
-        commit(peakMeta);
-      }
-      phase = 'SEARCH_PEAK';
-      valleyVal = 0; peakVal = 0; peakMeta = null;
-      wasArmed = false;
-      continue;
-    }
-
-    const absV = Math.abs(v);
-    const b    = Math.max(0, (fwTarget - absV) / fwTarget);
-
-    if (!wasArmed) { valleyVal = b; wasArmed = true; }
-
-    if (phase === 'SEARCH_PEAK') {
-      if (b < valleyVal) valleyVal = b;
-      if (b >= DIP_ENTER_RATIO && b >= valleyVal + DIP_REBOUND_RATIO) {
-        phase = 'IN_PEAK';
-        peakVal = b;
-        peakMeta = { t, flywheelVel:absV, flywheelTarget:fwTarget, kickerVel:kvVal, kickerTarget:kspVal!=null?Math.abs(kspVal):null };
-        peakEnterT = t;
-      }
-    } else { // IN_PEAK
-      if (b > peakVal) {
-        peakVal = b;
-        peakMeta = { t, flywheelVel:absV, flywheelTarget:fwTarget, kickerVel:kvVal, kickerTarget:kspVal!=null?Math.abs(kspVal):null };
-      } else if (peakVal - b >= DIP_REBOUND_RATIO) {
-        const dipDuration = t - peakEnterT;
-        if (dipDuration >= MIN_DIP_DURATION_S) {
-          commit(peakMeta);
-        }
-        phase = 'SEARCH_PEAK';
-        valleyVal = b;
-        peakVal = 0; peakMeta = null;
-      }
-    }
-  }
-  if (phase === 'IN_PEAK' && peakVal >= DIP_ENTER_RATIO
-      && peakMeta && (peakMeta.t - peakEnterT) >= MIN_DIP_DURATION_S) {
-    commit(peakMeta);
-  }
-
-  // Group shots into bursts (gap > BURST_GAP_S = new burst)
-  const bursts = [];
-  for (const s of shots) {
-    const last = bursts[bursts.length-1];
-    if (last && s.t - last.endTime <= BURST_GAP_S) {
-      last.shotTimes.push(s.t);
-      last.endTime = s.t;
-    } else {
-      bursts.push({ startTime:s.t, endTime:s.t, shotTimes:[s.t] });
-    }
-  }
-
-  // Per-burst stats
-  for (const b of bursts) {
-    const n = b.shotTimes.length;
-    // For multi-shot bursts, measured duration = last-first; avgBps = (n-1) shots happened over that span
-    // (first shot starts the burst, each subsequent one marks an interval).
-    const span = b.endTime - b.startTime;
-    b.shotCount = n;
-    b.duration  = span;
-    b.avgBps    = (n >= 2 && span > 0) ? (n - 1) / span * 1 /* shots per sec during the burst */ : null;
-    // Alt: balls fed per second using full count over span. Keep as 'n-1 / span' for more accurate "rate while shooting".
-    // Peak BPS: max number of shots inside any PEAK_WINDOW_S-second window
-    let peak = 0;
-    for (let i=0; i<n; i++) {
-      let cnt = 1;
-      for (let j=i+1; j<n; j++) {
-        if (b.shotTimes[j] - b.shotTimes[i] <= PEAK_WINDOW_S) cnt++;
-        else break;
-      }
-      if (cnt > peak) peak = cnt;
-    }
-    b.peakBps = peak; // shots in the hottest 1-second window (integer, shots/sec)
-  }
-
-  const multiBursts = bursts.filter(b => b.shotCount >= 2);
-  const overallAvgBps = multiBursts.length
-    ? multiBursts.reduce((s,b)=>s+b.avgBps,0) / multiBursts.length
-    : null;
-  const overallPeakBps = bursts.length ? Math.max(...bursts.map(b=>b.peakBps)) : 0;
-
-  return {
-    available: true,
-    hasData: true,
-    shots,
-    bursts,
-    totalShots:  shots.length,
-    burstCount:  bursts.length,
-    overallAvgBps,
-    overallPeakBps,
-    rejectedByKicker,
-    config: { FW_ARMED_RPM, DIP_ENTER_RATIO, DIP_REBOUND_RATIO, MIN_DIP_DURATION_S, MIN_SHOT_GAP_S, BURST_GAP_S, PEAK_WINDOW_S, KICK_CROSS_CHECK, KICK_DIP_RATIO, KICK_WINDOW_S },
-    signals: { kv, ksp, fw, fwsp }
-  };
-}
-
-function renderShots(panel, P, toSec) {
-  const res = detectShots(P, toSec);
-  if (!res.available) {
-    panel.innerHTML = `<div class="chart-box" style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">
-      <strong>Shot detection unavailable</strong><br>${res.reason}
-    </div>`;
-    return;
-  }
-
-  const { totalShots, burstCount, overallAvgBps, overallPeakBps, bursts, shots, config, signals } = res;
-
-  const avgBpsTxt  = overallAvgBps!=null ? overallAvgBps.toFixed(2) : '—';
-  const peakBpsTxt = overallPeakBps ? overallPeakBps.toFixed(0) : '—';
-
-  // Summary + explanation + burst table + chart
-  panel.innerHTML = `
-    <div class="info-banner" style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:6px;padding:10px 14px;margin:10px 0;font-size:12px;color:#cbd5e1;line-height:1.5">
-      <strong style="color:#eab308">🏀 How ball counting works:</strong>
-      We watch for dips in the <strong>flywheel velocity</strong> while it's armed
-      (target &gt; ${config.FW_ARMED_RPM} RPM). The flywheel's heavy inertia filters out PID noise,
-      so its dip signature is very clean. A prominence-based peak finder counts a ball whenever the
-      flywheel drops ≥${(config.DIP_ENTER_RATIO*100).toFixed(1)}% below setpoint <em>and</em> rebounds
-      ≥${(config.DIP_REBOUND_RATIO*100).toFixed(1)}% on both sides, <em>and</em> the dip lasts at least
-      ${(config.MIN_DIP_DURATION_S*1000).toFixed(0)}ms${config.KICK_CROSS_CHECK ? `, <em>and</em> the <strong>kicker</strong> also shows a ≥${(config.KICK_DIP_RATIO*100).toFixed(0)}% dip within ±${(config.KICK_WINDOW_S*1000).toFixed(0)}ms (cross-validation)` : ''}.
-      Shots within ${config.BURST_GAP_S.toFixed(1)}s of each other form a <strong>burst</strong>.
-      Peak BPS = most balls inside any rolling ${config.PEAK_WINDOW_S.toFixed(1)}s window.
-      ${res.rejectedByKicker ? `<br><span style="color:#94a3b8;font-size:11px">ℹ️ ${res.rejectedByKicker} candidate dip(s) rejected — no coincident kicker drop.</span>` : ''}
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="label">Total Balls Shot</div><div class="value">${totalShots} <span class="unit">balls</span></div></div>
-      <div class="stat-card"><div class="label">Shot Bursts</div><div class="value">${burstCount} <span class="unit">bursts</span></div></div>
-      <div class="stat-card ${overallPeakBps>=3?'ok':overallPeakBps>=2?'warning':''}"><div class="label">Peak Rate (1s window)</div><div class="value">${peakBpsTxt} <span class="unit">balls/s</span></div></div>
-      <div class="stat-card"><div class="label">Avg Burst Rate</div><div class="value">${avgBpsTxt} <span class="unit">balls/s</span></div></div>
-    </div>
-    <div class="section-title">Burst Breakdown</div>
-    <div class="chart-box">
-      <table class="data-table">
-        <thead><tr><th>#</th><th>Start (s)</th><th>Duration (s)</th><th>Shots</th><th>Avg BPS</th><th>Peak BPS</th></tr></thead>
-        <tbody id="burstTable"></tbody>
-      </table>
-    </div>
-    <div class="section-title">Flywheel Velocity with Detected Shots</div>
-    <div class="chart-box"><h3>Flywheel velocity (RPM), setpoint, and shot markers</h3><canvas id="shotsChart"></canvas>
-      <div class="legend">
-        <span><div class="dot" style="background:#ef4444"></div>Flywheel velocity</span>
-        <span><div class="dot" style="background:#94a3b8"></div>Flywheel setpoint</span>
-        <span><div class="dot" style="background:#f87171;border-radius:50%;width:10px;height:10px;border:1.5px solid #fff"></div>Shot detected (numbered)</span>
-      </div>
-    </div>
-    <div class="section-title">Kicker Velocity (Cross-validation)</div>
-    <div class="chart-box"><h3>Kicker velocity (abs) and setpoint — must dip alongside flywheel for a shot to count</h3><canvas id="kickerShotsChart"></canvas>
-      <div class="legend">
-        <span><div class="dot" style="background:#eab308"></div>Kicker velocity</span>
-        <span><div class="dot" style="background:#94a3b8"></div>Kicker setpoint</span>
-      </div>
-    </div>
-  `;
-
-  // Burst table
-  const tb = panel.querySelector('#burstTable');
-  if (!bursts.length) {
-    tb.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:14px">No shots detected in this log.</td></tr>`;
-  } else {
-    tb.innerHTML = bursts.map((b,i) => {
-      const avg = b.avgBps!=null ? b.avgBps.toFixed(2) : '—';
-      return `<tr>
-        <td>${i+1}</td>
-        <td>${b.startTime.toFixed(2)}</td>
-        <td>${b.duration.toFixed(2)}</td>
-        <td><b>${b.shotCount}</b></td>
-        <td>${avg}</td>
-        <td>${b.peakBps.toFixed(0)}</td>
-      </tr>`;
-    }).join('');
-  }
-
-  // PRIMARY chart — flywheel velocity + setpoint + shot markers. Use min-preserving
-  // downsample so dips stay visible on the chart (plain dsMax would erase them).
-  const fwAbs    = { times: signals.fw.times,   values: signals.fw.values.map(v => Math.abs(v)) };
-  const fwspAbs  = signals.fwsp ? { times: signals.fwsp.times, values: signals.fwsp.values.map(v => Math.abs(v)) } : null;
-
-  const fwDs     = dsMinMax(fwAbs.times, fwAbs.values, MAX_PTS);
-  const fwspDs   = fwspAbs ? dsMax(fwspAbs.times, fwspAbs.values, MAX_PTS) : null;
-
-  const fwPoints    = fwDs.times.map((t,i)   => ({ x: +t.toFixed(3), y: fwDs.values[i] }));
-  const fwspPoints  = fwspDs ? fwspDs.times.map((t,i) => ({ x: +t.toFixed(3), y: fwspDs.values[i] })) : null;
-  // Shot markers: plot each shot at (shot time, flywheel velocity at dip minimum)
-  const shotPoints  = shots.map((s,i) => ({ x: +s.t.toFixed(3), y: s.flywheelVel, idx: i+1 }));
-
-  const datasets = [
-    {
-      type:'line', label:'Flywheel velocity', data: fwPoints,
-      borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.06)',
-      borderWidth:1.2, pointRadius:0, tension:0, fill:false,
-      parsing:false, showLine:true
-    }
-  ];
-  if (fwspPoints) {
-    datasets.push({
-      type:'line', label:'Flywheel setpoint', data: fwspPoints,
-      borderColor:'#94a3b8', borderWidth:1.2, borderDash:[6,3], pointRadius:0, tension:0,
-      parsing:false, showLine:true, stepped:true
-    });
-  }
-  datasets.push({
-    type:'scatter', label:'Shot detected', data: shotPoints,
-    pointBackgroundColor:'#f87171', pointBorderColor:'#fff', pointBorderWidth:1.5,
-    pointRadius:6, pointHoverRadius:8,
-    parsing:false, showLine:false
-  });
-
-  // Numbered labels: use the annotation plugin to add a label for each shot.
-  const annotations = {};
-  shots.forEach((s,i) => {
-    annotations['shotLbl'+i] = {
-      type:'label',
-      xValue: +s.t.toFixed(3),
-      yValue: s.flywheelVel,
-      content: String(i+1),
-      color:'#ffffff',
-      backgroundColor:'rgba(239,68,68,0.92)',
-      borderRadius: 10,
-      padding: { top:2, bottom:2, left:5, right:5 },
-      font: { size: 10, weight: 'bold' },
-      yAdjust: -16,
-      z: 100
-    };
-  });
-
-  mkChart(panel.querySelector('#shotsChart'), {
-    type:'scatter',
-    data: { datasets },
-    options: {
-      scales: {
-        x: { type:'linear', ticks:{color:'#9ca3af',maxTicksLimit:20, callback:v=>v.toFixed(1)+'s'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Time (s)',color:'#9ca3af'} },
-        y: { ticks:{color:'#9ca3af'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Flywheel |velocity| (RPM)',color:'#9ca3af'} }
-      },
-      plugins: {
-        legend: { labels: { color:'#e4e4e7', filter: item => item.text !== 'Shot detected' } },
-        annotation: { annotations },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              if (ctx.dataset.label === 'Shot detected') {
-                return `Shot #${ctx.raw.idx} at ${ctx.raw.x.toFixed(2)}s (RPM=${ctx.raw.y.toFixed(0)})`;
-              }
-              return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)} @ ${ctx.parsed.x.toFixed(2)}s`;
-            }
-          }
-        }
-      }
-    }
-  });
-
-  // SECONDARY chart — kicker (cross-validation view). Uses dsMinMax too so dips are preserved.
-  const kvAbs  = { times: signals.kv.times,  values: signals.kv.values.map(v => Math.abs(v)) };
-  const kspAbs = signals.ksp ? { times: signals.ksp.times, values: signals.ksp.values.map(v => Math.abs(v)) } : null;
-  const kvDs   = dsMinMax(kvAbs.times, kvAbs.values, MAX_PTS);
-  const kspDs  = kspAbs ? dsMax(kspAbs.times, kspAbs.values, MAX_PTS) : null;
-  const kvPoints  = kvDs.times.map((t,i)  => ({ x: +t.toFixed(3), y: kvDs.values[i] }));
-  const kspPoints = kspDs ? kspDs.times.map((t,i) => ({ x: +t.toFixed(3), y: kspDs.values[i] })) : null;
-
-  const kickDatasets = [{
-    type:'line', label:'Kicker velocity', data: kvPoints,
-    borderColor:'#eab308', backgroundColor:'rgba(234,179,8,0.05)',
-    borderWidth:1.2, pointRadius:0, tension:0, fill:false,
-    parsing:false, showLine:true
-  }];
-  if (kspPoints) {
-    kickDatasets.push({
-      type:'line', label:'Kicker setpoint', data: kspPoints,
-      borderColor:'#94a3b8', borderWidth:1.2, borderDash:[6,3], pointRadius:0, tension:0,
-      parsing:false, showLine:true, stepped:true
-    });
-  }
-  // Vertical guide lines at each committed shot time for easy eyeballing
-  const kickAnnotations = {};
-  shots.forEach((s,i) => {
-    kickAnnotations['shotLine'+i] = {
-      type:'line',
-      xMin: +s.t.toFixed(3),
-      xMax: +s.t.toFixed(3),
-      borderColor: 'rgba(239,68,68,0.35)',
-      borderWidth: 1,
-      borderDash: [3,3]
-    };
-  });
-
-  mkChart(panel.querySelector('#kickerShotsChart'), {
-    type:'scatter',
-    data: { datasets: kickDatasets },
-    options: {
-      scales: {
-        x: { type:'linear', ticks:{color:'#9ca3af',maxTicksLimit:20, callback:v=>v.toFixed(1)+'s'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Time (s)',color:'#9ca3af'} },
-        y: { ticks:{color:'#9ca3af'}, grid:{color:'rgba(255,255,255,0.05)'}, title:{display:true,text:'Kicker |velocity| (rad/s)',color:'#9ca3af'}, beginAtZero:true }
-      },
-      plugins: {
-        legend: { labels: { color:'#e4e4e7' } },
-        annotation: { annotations: kickAnnotations },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} @ ${ctx.parsed.x.toFixed(2)}s`
-          }
-        }
-      }
-    }
-  });
-}
-
 // ============== ALERTS / CONSOLE TAB ==============
 function renderAlerts(panel, P, toSec) {
   const alertErrors = P.get('/RealOutputs/Alerts/errors');
@@ -1779,7 +1319,6 @@ function renderAlerts(panel, P, toSec) {
 const MECHANISMS = [
   {id:'shooter', label:'Shooter', tabs:[
     {id:'ready', title:'Ready Status', custom:'shooterReady'},
-    {id:'shots', title:'Ball Counter', custom:'shotsCounter'},
     {id:'hood', title:'Hood', setpoint:'/Subsystems/Shooter/Hood//TargetAngle', current:'/Subsystems/Shooter/Hood//CurrentAngle', atTarget:'/Subsystems/Shooter/Hood//AtTarget', error:'/Subsystems/Shooter/Hood//AngleError', unit:'deg', state:'/RealOutputs/States/HoodState'},
     {id:'turret', title:'Turret', setpoint:'/Subsystems/Shooter/Turret//TargetAngle', current:'/Subsystems/Shooter/Turret//CurrentAngle', atTarget:'/Subsystems/Shooter/Turret//AtTarget', motorCurrent:'/Subsystems/Shooter/Turret//Current', voltage:'/Subsystems/Shooter/Turret//Voltage', unit:'deg', state:'/RealOutputs/States/TurretState'},
     {id:'flywheels', title:'Flywheels', setpoint:'/Subsystems/Shooter/FlyWheels//TargetVelocity', current:'/Subsystems/Shooter/FlyWheels//CurrentVelocity', atTarget:'/Subsystems/Shooter/FlyWheels//AtTarget', unit:'RPM', state:'/RealOutputs/States/FlyWheelState'},
@@ -2010,25 +1549,12 @@ function extractProfile(P, toSec, filename, fileModified) {
   const errorCount = seenErr.size;
   const warningCount = seenWarn.size;
 
-  // ---- Ball-shot detection summary ----
-  let totalShots = 0, burstCount = 0, overallPeakBps = 0, overallAvgBps = null;
-  try {
-    const shotRes = detectShots(P, toSec);
-    if (shotRes.available) {
-      totalShots = shotRes.totalShots;
-      burstCount = shotRes.burstCount;
-      overallPeakBps = shotRes.overallPeakBps;
-      overallAvgBps = shotRes.overallAvgBps;
-    }
-  } catch (e) { /* non-fatal */ }
-
   return {
     filename: filename || 'unknown',
     date: new Date().toISOString(),
     fileModified: (typeof fileModified === 'number' && fileModified > 0) ? fileModified : null,
     _v: 2, // schema version: bump when extractProfile output changes. UI only trusts error counts at v>=2
     peakCurrent, avgCurrent, duration, minVoltage, avgVoltage, timeAbove120: t120, totalWh,
-    totalShots, burstCount, peakBps: overallPeakBps, avgBps: overallAvgBps,
     breakerRisk: worstRisk,
     worstExcursion: worstExc ? {duration: worstExc.duration, peakCurrent: worstExc.peakCurrent, avgCurrent: worstExc.avgCurrent, startTime: worstExc.startTime} : null,
     excursionCount,
@@ -2313,10 +1839,7 @@ function showHistoryPreview() {
     if (p.peakCurrent != null) {
       const peak = p.peakCurrent, dur = p.duration, minV = p.minVoltage;
       const wh = p.totalWh;
-      const shots = p.totalShots;
-      const peakBps = p.peakBps;
-      const shotsPart = shots ? `<span>🏀 <b>${shots}</b>${peakBps?` (${peakBps.toFixed(0)}/s peak)`:''}</span>` : '';
-      statsHTML = `<div class="mc-stats">${peak?`<span><b>${peak.toFixed(0)}A</b> peak</span>`:''}${dur?`<span><b>${dur.toFixed(0)}s</b></span>`:''}${minV?`<span><b>${minV.toFixed(1)}V</b></span>`:''}${wh?`<span><b>${wh.toFixed(1)}Wh</b></span>`:''}${shotsPart}</div>`;
+      statsHTML = `<div class="mc-stats">${peak?`<span><b>${peak.toFixed(0)}A</b> peak</span>`:''}${dur?`<span><b>${dur.toFixed(0)}s</b></span>`:''}${minV?`<span><b>${minV.toFixed(1)}V</b></span>`:''}${wh?`<span><b>${wh.toFixed(1)}Wh</b></span>`:''}</div>`;
     }
 
     // Only trust error counts from profiles extracted under current schema (v2+).
@@ -2842,17 +2365,6 @@ function buildDashboard(P,fileName,fileModified){
     if (cached && cached.fileModified) fileModified = cached.fileModified;
   }
 
-  // Pick the PDH channel map that matches when the log was recorded.
-  // Prefer the filename-parsed date (most accurate — records when the robot ran),
-  // fall back to file mtime, then null (→ pre-cutoff wiring).
-  {
-    const pr = fileName ? parseLogName(fileName) : null;
-    let logDateMs = null;
-    if (pr && pr.date instanceof Date && !isNaN(pr.date)) logDateMs = pr.date.getTime();
-    else if (typeof fileModified === 'number' && fileModified > 0) logDateMs = fileModified;
-    applyPDHChannelsForDate(logDateMs);
-  }
-
   // Extract profile and add to history
   const currentProfile=extractProfile(P,toSec,fileName||'unknown',fileModified);
   addToHistory(currentProfile);
@@ -2886,7 +2398,6 @@ function buildDashboard(P,fileName,fileModified){
           subBar.appendChild(btn);subPanels.appendChild(sp2);
           function renderSubTab(st2){
             if(st2.custom==='shooterReady') renderShooterReady(sp2,P,toSec);
-            else if(st2.custom==='shotsCounter') renderShots(sp2,P,toSec);
             else renderMechanism(sp2,P,toSec,st2);
           }
           if(si===0){subRendered.add(st.id);renderSubTab(st);}

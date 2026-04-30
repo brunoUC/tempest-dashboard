@@ -172,6 +172,8 @@
     .match-card .mc-alert::before { content: '⚠'; font-size: 11px; }
     .match-card.has-error { border-color: rgba(239,68,68,0.45); box-shadow: inset 3px 0 0 var(--red); }
     .match-card.has-error:hover { border-color: var(--red); }
+    .match-card.new-log { border-color: rgba(6,182,212,0.35); border-style: dashed; }
+    .match-card.new-log:hover { border-color: var(--cyan); box-shadow: 0 6px 18px rgba(6,182,212,0.12); border-style: solid; }
     .match-card .mc-source { font-size: 10px; color: var(--text-muted); }
     .match-card .mc-source.session { color: var(--green); }
     .match-card .mc-source.cloud { color: var(--cyan); }
@@ -1402,6 +1404,8 @@ async function listCloudLogs() {
   if (!window.cloudSDK) return [];
   try {
     const { storage, ref, listAll, getBytes } = window.cloudSDK;
+
+    // Fetch analysed profiles
     const profRef = ref(storage, 'profiles');
     const result = await listAll(profRef);
     const profiles = await Promise.all(result.items.map(async item => {
@@ -1413,7 +1417,28 @@ async function listCloudLogs() {
         return profile;
       } catch (err) { console.warn('Failed to fetch profile', item.name, err); return null; }
     }));
-    return profiles.filter(p => p !== null);
+    const valid = profiles.filter(p => p !== null);
+
+    // Also surface raw logs uploaded by the log puller that have no profile yet
+    try {
+      const logsRef = ref(storage, 'logs');
+      const logsResult = await listAll(logsRef);
+      const profiledNames = new Set(valid.map(p => p.cloudFilename));
+      for (const item of logsResult.items) {
+        if (!profiledNames.has(item.name)) {
+          valid.push({
+            filename: item.name,
+            cloudFilename: item.name,
+            fromCloud: true,
+            noProfile: true,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to list raw logs from storage:', err);
+    }
+
+    return valid;
   } catch (err) {
     console.warn('Cloud list failed:', err);
     return [];
@@ -1458,6 +1483,14 @@ async function loadCloudLog(filename) {
     sessionLogs.set(filename, {parser: P, fileName: filename});
     if (statusEl) statusEl.style.display='none';
     buildDashboard(P, filename);
+    // If this log had no profile yet (uploaded by log puller), generate and upload one
+    // so it shows correctly in the history on future visits.
+    try {
+      const toSec = t => t / 1e6;
+      const profile = extractProfile(P, toSec, filename, null);
+      const fakeFile = { name: filename };
+      uploadToCloud(fakeFile, profile).catch(() => {});
+    } catch (_) { /* non-fatal — profile upload is best-effort */ }
   } catch (err) {
     if (statusEl) statusEl.textContent='Error: ' + err.message;
   }
@@ -1850,6 +1883,21 @@ function showHistoryPreview() {
 
   const TYPE_FULL = {'Q':'Qualification','E':'Elimination','P':'Practice'};
   function renderCard(p) {
+    // Logs uploaded by the log puller that have no analysed profile yet
+    if (p.noProfile) {
+      const escFn = p.filename.replace(/'/g,"\\'");
+      const pr = p._parsed || {};
+      const dateHint = (pr.dateStr && pr.timeStr) ? `${pr.dateStr} · ${pr.timeStr}` : p.filename;
+      return `
+        <div class="match-card new-log" onclick="switchToLog('${escFn}')" title="${p.filename}">
+          <div class="mc-top">
+            <div class="mc-badge unk">New Log</div>
+            <div class="mc-source cloud">☁ cloud</div>
+          </div>
+          <div class="mc-lab-date" style="font-size:14px;color:var(--cyan)">Click to analyze</div>
+          <div class="mc-date">${dateHint}</div>
+        </div>`;
+    }
     const pr = p._parsed;
     const isSession = cached.has(p.filename);
     const isCloud = p.fromCloud || p.cloudFilename;

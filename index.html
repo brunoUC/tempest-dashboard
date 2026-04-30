@@ -1467,13 +1467,23 @@ async function downloadCloudLog(filename) {
 // Merge cloud profiles into local history (cloud wins on conflict)
 async function syncCloudToHistory() {
   const cloudProfiles = await listCloudLogs();
-  if (!cloudProfiles.length) return 0;
+  const cloudNames = new Set(cloudProfiles.map(p => p.filename));
   const local = loadHistory();
   const localMap = new Map(local.map(p => [p.filename, p]));
+
+  // Add / update entries that exist in the cloud
   for (const cp of cloudProfiles) {
     cp.fromCloud = true;
     localMap.set(cp.filename, cp);
   }
+
+  // Remove entries that came from the cloud but no longer exist there
+  for (const [name, entry] of localMap) {
+    if ((entry.fromCloud || entry.cloudFilename) && !cloudNames.has(name)) {
+      localMap.delete(name);
+    }
+  }
+
   saveHistory(Array.from(localMap.values()));
   return cloudProfiles.length;
 }

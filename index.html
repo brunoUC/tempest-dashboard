@@ -10,7 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
-    import { getStorage, ref, uploadBytes, getBytes, listAll } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
+    import { getStorage, ref, uploadBytes, getBytes, listAll, getMetadata } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
     const firebaseConfig = {
       apiKey: "AIzaSyA_qgdzWfPxX4yn4FkwQGhekkIzgNQRwPU",
       authDomain: "tempest-dashboard-45a1e.firebaseapp.com",
@@ -22,7 +22,7 @@
     };
     const app = initializeApp(firebaseConfig);
     const storage = getStorage(app);
-    window.cloudSDK = { storage, ref, uploadBytes, getBytes, listAll };
+    window.cloudSDK = { storage, ref, uploadBytes, getBytes, listAll, getMetadata };
     window.dispatchEvent(new Event('firebaseReady'));
   </script>
   <style>
@@ -1421,19 +1421,25 @@ async function listCloudLogs() {
 
     // Also surface raw logs uploaded by the log puller that have no profile yet
     try {
+      const { getMetadata } = window.cloudSDK;
       const logsRef = ref(storage, 'logs');
       const logsResult = await listAll(logsRef);
       const profiledNames = new Set(valid.map(p => p.cloudFilename));
-      for (const item of logsResult.items) {
-        if (!profiledNames.has(item.name)) {
-          valid.push({
-            filename: item.name,
-            cloudFilename: item.name,
-            fromCloud: true,
-            noProfile: true,
-          });
-        }
-      }
+      await Promise.all(logsResult.items.map(async item => {
+        if (profiledNames.has(item.name)) return;
+        let fileModified = null;
+        try {
+          const meta = await getMetadata(item);
+          fileModified = meta.timeCreated ? new Date(meta.timeCreated).getTime() : null;
+        } catch (_) {}
+        valid.push({
+          filename: item.name,
+          cloudFilename: item.name,
+          fromCloud: true,
+          noProfile: true,
+          fileModified,
+        });
+      }));
     } catch (err) {
       console.warn('Failed to list raw logs from storage:', err);
     }
